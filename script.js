@@ -65,7 +65,7 @@ function StatCard({ icon, iconBg, label, value, sub }) {
   );
 }
 
-function NavCard({ label, sub, icon, onClick, onEdit }) {
+function NavCard({ label, sub, icon, onClick, onEdit, onDelete }) {
   return (
     <div className="nav-card" onClick={onClick}>
       <div className="nav-card-icon">{icon}</div>
@@ -155,7 +155,7 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context }) {
                    <span className="info-value">{student.sessions || 0} buổi</span>
                  </div>
                  <div className="info-item">
-                   <span className="info-label">Đơn Giá Chính:</span>
+                   <span className="info-label">Học Phí / Buổi:</span>
                    <span className="info-value">{fmt(student.pricePerSession)} đ</span>
                  </div>
                  
@@ -167,7 +167,7 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context }) {
                    <span className="info-value">{student.kemSessions || 0} buổi</span>
                  </div>
                  <div className="info-item">
-                   <span className="info-label">Đơn Giá Kèm:</span>
+                   <span className="info-label">Học Phí / Buổi:</span>
                    <span className="info-value">{fmt(student.kemPrice)} đ</span>
                  </div>
               </>
@@ -276,8 +276,8 @@ function DataPage({ classes, setClasses }) {
     
     // Mapping config - Simplified
     const [config, setConfig] = useState({
-        nameRange: "B5:B30",
-        priceRange: "C5:C30",
+        nameRange: "AM5:AM34",
+        priceRange: "AO5:AO34",
     });
 
     const handleExport = () => {
@@ -632,6 +632,14 @@ function HomePage({ onNavigate }) {
           <div className="home-card-body">
             <div className="home-card-title">Danh sách học sinh</div>
             <div className="home-card-desc">Quản lý danh sách học sinh theo lớp</div>
+          </div>
+          <div className="home-card-arrow">→</div>
+        </button>
+        <button className="home-card" onClick={() => onNavigate("timetable")}>
+          <div className="home-card-icon hc-green"><Icon name="calendar" size={32} /></div>
+          <div className="home-card-body">
+            <div className="home-card-title">Thời Khóa Biểu</div>
+            <div className="home-card-desc">Sắp xếp lịch học theo tuần</div>
           </div>
           <div className="home-card-arrow">→</div>
         </button>
@@ -1259,16 +1267,20 @@ function TuitionPage({ classes }) {
             <table className="students-table">
               <thead>
                 <tr>
-                  <th className="center">STT</th>
-                  <th className="center">TRẠNG THÁI</th>
-                  <th>HỌ VÀ TÊN</th>
-                  <th className="center">SỐ BUỔI<br/>CHÍNH</th>
-                  <th className="right">HP 1 BUỔI<br/>CHÍNH</th>
-                  <th className="right">TỔNG HP<br/>CHÍNH</th>
-                  <th className="center">SỐ BUỔI<br/>KÈM</th>
-                  <th className="right">HP 1 BUỔI<br/>KÈM</th>
-                  <th className="right">TỔNG HP<br/>KÈM</th>
-                  <th className="center">COPY</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>STT</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>TRẠNG THÁI</th>
+                  <th rowSpan={2} style={{verticalAlign:'middle'}}>HỌ VÀ TÊN</th>
+                  <th className="center" colSpan={3} style={{background:'#fce7f3', color:'#be185d', borderBottom:'2px solid #fbcfe8'}}>HỌC CHÍNH</th>
+                  <th className="center" colSpan={3} style={{background:'#ede9fe', color:'#6d28d9', borderBottom:'2px solid #ddd6fe'}}>HỌC KÈM</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>COPY</th>
+                </tr>
+                <tr>
+                  <th className="center" style={{background:'#fdf2f8'}}>SỐ BUỔI</th>
+                  <th className="right" style={{background:'#fdf2f8'}}>HP / BUỔI</th>
+                  <th className="right" style={{background:'#fdf2f8'}}>TỔNG HP</th>
+                  <th className="center" style={{background:'#f5f3ff'}}>SỐ BUỔI</th>
+                  <th className="right" style={{background:'#f5f3ff'}}>HP / BUỔI</th>
+                  <th className="right" style={{background:'#f5f3ff'}}>TỔNG HP</th>
                 </tr>
               </thead>
               <tbody>
@@ -1366,6 +1378,27 @@ function StudentPage({ classes, setClasses }) {
   const [newClassName, setNewClassName] = useState("");
   const [editingClassName, setEditingClassName] = useState("");
   const [editingClassId, setEditingClassId] = useState(null);
+
+  // Passcode delete state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingClassId, setDeletingClassId] = useState(null);
+  const [deletingClassName, setDeletingClassName] = useState("");
+  const [passcode, setPasscode] = useState("");
+  const [passcodeError, setPasscodeError] = useState(false);
+
+  // Class action menu (edit icon dropdown)
+  const [classMenuId, setClassMenuId] = useState(null); // id of class whose menu is open
+  const classMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!classMenuId) return;
+    const handler = (e) => {
+      if (classMenuRef.current && classMenuRef.current.contains(e.target)) return;
+      setClassMenuId(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [classMenuId]);
   
   // States for View 1 (Student List)
   const [searchQuery, setSearchQuery] = useState("");
@@ -1427,7 +1460,7 @@ function StudentPage({ classes, setClasses }) {
 
   const openAddModal = () => {
       setModalMode("add");
-      setFormData({ name: "", pricePerSession: 0, hasKem: false, kemPrice: 0 });
+      setFormData({ name: "", pricePerSession: 0, hasKem: false, kemPrice: 0, parentName: "", parentPhone: "", note: "", birthYear: "" });
       setShowModal(true);
   };
 
@@ -1438,7 +1471,11 @@ function StudentPage({ classes, setClasses }) {
           name: student.name,
           pricePerSession: student.pricePerSession,
           hasKem: !!student.hasKem,
-          kemPrice: student.kemPrice || 0
+          kemPrice: student.kemPrice || 0,
+          parentName: student.parentName || "",
+          parentPhone: student.parentPhone || "",
+          note: student.note || "",
+          birthYear: student.birthYear || ""
       });
       setShowModal(true);
   };
@@ -1458,6 +1495,10 @@ function StudentPage({ classes, setClasses }) {
                   pricePerSession: price,
                   hasKem: formData.hasKem,
                   kemPrice: formData.hasKem ? kemPrice : 0,
+                  parentName: (formData.parentName || "").trim(),
+                  parentPhone: (formData.parentPhone || "").trim(),
+                  note: (formData.note || "").trim(),
+                  birthYear: (formData.birthYear || "").trim(),
                   days: [] // Default empty schedule
               };
               return { ...c, students: [...(c.students || []), newStudent] };
@@ -1469,7 +1510,11 @@ function StudentPage({ classes, setClasses }) {
                       name: formData.name.trim(),
                       pricePerSession: price,
                       hasKem: formData.hasKem,
-                      kemPrice: formData.hasKem ? kemPrice : 0
+                      kemPrice: formData.hasKem ? kemPrice : 0,
+                      parentName: (formData.parentName || "").trim(),
+                      parentPhone: (formData.parentPhone || "").trim(),
+                      note: (formData.note || "").trim(),
+                      birthYear: (formData.birthYear || "").trim()
                   })
               };
           }
@@ -1497,6 +1542,27 @@ function StudentPage({ classes, setClasses }) {
       setEditingClassId(null);
   }
 
+  const openDeleteModal = (cls) => {
+      setDeletingClassId(cls.id);
+      setDeletingClassName(cls.name);
+      setPasscode("");
+      setPasscodeError(false);
+      setShowDeleteModal(true);
+  };
+
+  const handleDeleteClass = () => {
+      if (passcode !== "9999") {
+          setPasscodeError(true);
+          setPasscode("");
+          return;
+      }
+      const updated = classes.filter(c => c.id !== deletingClassId);
+      setClasses(updated); saveClasses(updated);
+      setShowDeleteModal(false);
+      setDeletingClassId(null);
+      setPasscode("");
+  };
+
   // VIEW 0: LIST CLASSES (Added "Add Class" here)
   if (step === 0) {
     return (
@@ -1508,18 +1574,48 @@ function StudentPage({ classes, setClasses }) {
         <div className="nav-grid">
           {classes.length === 0 ? <div className="empty-state"><div className="empty-state-icon">🏫</div><div>Chưa có lớp nào</div></div> : null}
           {classes.map(c => (
-            <NavCard 
-                key={c.id} 
-                label={c.name} 
-                sub={`${(c.students || []).length} học sinh`} 
-                icon={<Icon name="school" />} 
-                onClick={() => { setSelClassId(c.id); setStep(1); }} 
-                onEdit={() => {
-                    setEditingClassId(c.id);
-                    setEditingClassName(c.name);
-                    setShowEditClass(true);
-                }}
-            />
+            <div key={c.id} style={{position:'relative'}}>
+              <NavCard 
+                  label={c.name} 
+                  sub={`${(c.students || []).length} học sinh`} 
+                  icon={<Icon name="school" />} 
+                  onClick={() => { setSelClassId(c.id); setStep(1); }} 
+                  onEdit={() => setClassMenuId(classMenuId === c.id ? null : c.id)}
+              />
+              {/* Dropdown menu */}
+              {classMenuId === c.id && (
+                <div ref={classMenuRef} style={{
+                  position:'absolute', top:'100%', right:8, zIndex:50, marginTop:4,
+                  background:'#fff', borderRadius:10, border:'1px solid #fff0f5',
+                  boxShadow:'0 8px 24px rgba(255,119,160,0.18)', overflow:'hidden', minWidth:150
+                }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => {
+                    setEditingClassId(c.id); setEditingClassName(c.name);
+                    setShowEditClass(true); setClassMenuId(null);
+                  }} style={{
+                    width:'100%', padding:'10px 16px', border:'none', background:'transparent',
+                    display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                    fontSize:13, fontWeight:600, color:'#374151', textAlign:'left'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background='#fff5f8'}
+                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <Icon name="edit" size={15}/> Đổi tên lớp
+                  </button>
+                  <div style={{height:1, background:'#fff0f5'}}/>
+                  <button onClick={() => {
+                    openDeleteModal(c); setClassMenuId(null);
+                  }} style={{
+                    width:'100%', padding:'10px 16px', border:'none', background:'transparent',
+                    display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                    fontSize:13, fontWeight:600, color:'#ef4444', textAlign:'left'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background='#fef2f2'}
+                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <Icon name="trash" size={15}/> Xóa lớp
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
         {showAddClass && (
@@ -1556,6 +1652,55 @@ function StudentPage({ classes, setClasses }) {
             </div>
           </div>
         )}
+
+        {/* Modal Xóa lớp với passcode */}
+        {showDeleteModal && (
+          <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+            <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+              <div className="modal-dialog-header" style={{background:'linear-gradient(135deg,#ef4444,#dc2626)'}}>
+                🗑️ Xóa lớp học
+              </div>
+              <div className="modal-dialog-body">
+                <div style={{textAlign:'center', marginBottom:16}}>
+                  <div style={{fontSize:32, marginBottom:8}}>⚠️</div>
+                  <div style={{fontSize:14, color:'#374151', fontWeight:600}}>Bạn muốn xóa lớp</div>
+                  <div style={{fontSize:18, fontWeight:700, color:'#ef4444', margin:'6px 0'}}>{deletingClassName}</div>
+                  <div style={{fontSize:13, color:'#9ca3af'}}>Toàn bộ học sinh và dữ liệu điểm danh sẽ bị xóa vĩnh viễn.</div>
+                </div>
+                <label className="form-label" style={{textAlign:'center', display:'block'}}>Nhập mã xác nhận (4 số)</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  autoFocus
+                  placeholder="● ● ● ●"
+                  value={passcode}
+                  style={{textAlign:'center', fontSize:22, letterSpacing:8, fontWeight:700,
+                    borderColor: passcodeError ? '#ef4444' : undefined,
+                    boxShadow: passcodeError ? '0 0 0 3px rgba(239,68,68,0.15)' : undefined
+                  }}
+                  onChange={e => { setPasscode(e.target.value.replace(/\D/g,"")); setPasscodeError(false); }}
+                  onKeyDown={e => e.key === "Enter" && handleDeleteClass()}
+                />
+                {passcodeError && (
+                  <div style={{color:'#ef4444', fontSize:13, textAlign:'center', marginTop:8, fontWeight:600}}>
+                    ❌ Mã không đúng, vui lòng thử lại
+                  </div>
+                )}
+              </div>
+              <div className="modal-dialog-footer">
+                <button className="btn-cancel" onClick={() => setShowDeleteModal(false)}>Huỷ</button>
+                <button onClick={handleDeleteClass}
+                  style={{padding:'8px 18px', borderRadius:8, border:'none',
+                    background:'linear-gradient(135deg,#ef4444,#dc2626)', color:'#fff',
+                    fontSize:13, fontWeight:600, cursor:'pointer'}}>
+                  Xác nhận xóa
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1588,7 +1733,7 @@ function StudentPage({ classes, setClasses }) {
             
             <div style={{display:'flex', gap:10, alignItems:'center'}}>
                  <span style={{fontSize:13, color:'#6b7280', fontWeight:600}}>Xem thống kê:</span>
-                 <select className="form-input" style={{width:80}} value={viewMonth} onChange={e => setViewMonth(parseInt(e.target.value))}>
+                 <select className="form-input" style={{width:110}} value={viewMonth} onChange={e => setViewMonth(parseInt(e.target.value))}>
                     {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
                  </select>
                  <select className="form-input" style={{width:90}} value={viewYear} onChange={e => setViewYear(e.target.value)}>
@@ -1603,17 +1748,32 @@ function StudentPage({ classes, setClasses }) {
           </div>
           <div className="table-wrap">
             <table className="students-table">
+              <colgroup>
+                <col style={{width:52}}/>
+                <col/>
+                <col style={{width:100}}/>
+                <col style={{width:110}}/>
+                <col style={{width:110}}/>
+                <col style={{width:100}}/>
+                <col style={{width:110}}/>
+                <col style={{width:110}}/>
+                <col style={{width:90}}/>
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="center">STT</th>
-                  <th>HỌ VÀ TÊN</th>
-                  <th className="center">SỐ BUỔI<br/>CHÍNH</th>
-                  <th className="right">HP 1 BUỔI<br/>CHÍNH</th>
-                  <th className="right">TỔNG HP<br/>CHÍNH</th>
-                  <th className="center">SỐ BUỔI<br/>KÈM</th>
-                  <th className="right">HP 1 BUỔI<br/>KÈM</th>
-                  <th className="right">TỔNG HP<br/>KÈM</th>
-                  <th className="center">THAO TÁC</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>STT</th>
+                  <th rowSpan={2} style={{verticalAlign:'middle'}}>HỌ VÀ TÊN</th>
+                  <th className="center" colSpan={3} style={{background:'#fce7f3', color:'#be185d', borderBottom:'2px solid #fbcfe8'}}>HỌC CHÍNH</th>
+                  <th className="center" colSpan={3} style={{background:'#ede9fe', color:'#6d28d9', borderBottom:'2px solid #ddd6fe'}}>HỌC KÈM</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>THAO TÁC</th>
+                </tr>
+                <tr>
+                  <th className="center" style={{background:'#fdf2f8'}}>SỐ BUỔI</th>
+                  <th className="right" style={{background:'#fdf2f8'}}>HP / BUỔI</th>
+                  <th className="right" style={{background:'#fdf2f8'}}>TỔNG HP</th>
+                  <th className="center" style={{background:'#f5f3ff'}}>SỐ BUỔI</th>
+                  <th className="right" style={{background:'#f5f3ff'}}>HP / BUỔI</th>
+                  <th className="right" style={{background:'#f5f3ff'}}>TỔNG HP</th>
                 </tr>
               </thead>
               <tbody>
@@ -1682,6 +1842,39 @@ function StudentPage({ classes, setClasses }) {
                       onChange={e => setFormData(f => ({ ...f, kemPrice: e.target.value }))} />
                   </>
                 )}
+
+                {/* Thông tin học sinh */}
+                <div style={{margin: '18px 0 10px', paddingTop: 14, borderTop: '1.5px solid #ffd6e4'}}>
+                  <div style={{fontSize: 13, fontWeight: 700, color: '#ff77a0', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px'}}>
+                    🎓 Thông tin học sinh
+                  </div>
+                  <label className="form-label">Năm sinh</label>
+                  <input className="form-input" value={formData.birthYear || ""}
+                    placeholder="VD: 2015"
+                    maxLength={4}
+                    onChange={e => setFormData(f => ({ ...f, birthYear: e.target.value.replace(/\D/g,'') }))} />
+                </div>
+
+                {/* Thông tin phụ huynh */}
+                <div style={{margin: '18px 0 10px', paddingTop: 14, borderTop: '1.5px solid #ffd6e4'}}>
+                  <div style={{fontSize: 13, fontWeight: 700, color: '#ff77a0', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px'}}>
+                    👨‍👩‍👧 Thông tin phụ huynh
+                  </div>
+                  <label className="form-label">Tên phụ huynh</label>
+                  <input className="form-input" value={formData.parentName || ""}
+                    placeholder="VD: Nguyễn Văn A"
+                    onChange={e => setFormData(f => ({ ...f, parentName: e.target.value }))} />
+                  <label className="form-label" style={{ marginTop: 10 }}>Số điện thoại</label>
+                  <input className="form-input" value={formData.parentPhone || ""}
+                    placeholder="VD: 0912 345 678"
+                    onChange={e => setFormData(f => ({ ...f, parentPhone: e.target.value }))} />
+                  <label className="form-label" style={{ marginTop: 10 }}>Ghi chú</label>
+                  <textarea className="form-input" value={formData.note || ""}
+                    placeholder="Ghi chú thêm về học sinh..."
+                    rows={3}
+                    style={{resize: 'vertical', fontFamily: 'inherit'}}
+                    onChange={e => setFormData(f => ({ ...f, note: e.target.value }))} />
+                </div>
               </div>
               <div className="modal-dialog-footer">
                 <button className="btn-cancel" onClick={() => setShowModal(false)}>Huỷ</button>
@@ -1696,6 +1889,8 @@ function StudentPage({ classes, setClasses }) {
 
   // VIEW 2: STUDENT DETAIL (Monthly Attendance)
   if (step === 2 && activeClass && viewStudentDetail) {
+    // Always use the latest data from activeClass (in case user edited the student)
+    const liveStudent = (activeClass.students || []).find(s => s.id === viewStudentDetail.id) || viewStudentDetail;
     // Filter sessions for the selected month/year
     const studentSessions = (activeClass.sessions || []).filter(ses => {
         if (!ses.date) return false;
@@ -1703,23 +1898,120 @@ function StudentPage({ classes, setClasses }) {
         return y === viewYear && parseInt(m) === viewMonth;
     }).sort((a,b) => a.date.localeCompare(b.date)); // Sort by date ascending
 
-    const mainCount = studentSessions.filter(ses => (ses.attendance || []).includes(viewStudentDetail.id)).length;
-    const kemCount = studentSessions.filter(ses => (ses.attendanceKem || []).includes(viewStudentDetail.id)).length;
+    const mainCount = studentSessions.filter(ses => (ses.attendance || []).includes(liveStudent.id)).length;
+    const kemCount = studentSessions.filter(ses => (ses.attendanceKem || []).includes(liveStudent.id)).length;
 
     return (
         <div className="page-content">
              <div className="page-topbar">
                 <div style={{display:'flex', gap:10, alignItems:'center'}}>
                     <button className="btn-back" onClick={() => setStep(1)}>‹ Quay lại</button>
-                    <div className="page-topbar-title">{viewStudentDetail.name} - Chi tiết tháng {viewMonth}/{viewYear}</div>
+                    <div className="page-topbar-title">{liveStudent.name} - Chi tiết tháng {viewMonth}/{viewYear}</div>
                 </div>
              </div>
 
-             <div className="stats-grid">
-                <StatCard iconBg="rgba(22,163,74,0.1)" icon={<Icon name="check" />} label="Số buổi học chính" value={mainCount} />
-                {viewStudentDetail.hasKem && (
-                    <StatCard iconBg="rgba(139,92,246,0.1)" icon={<Icon name="notebook" />} label="Số buổi học kèm" value={kemCount} />
-                )}
+             {/* Thông tin học sinh & phụ huynh */}
+             <div style={{margin: '0 32px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16}}>
+                {/* Card học sinh */}
+                <div style={{background:'#fff', borderRadius:16, padding:'20px 24px', border:'1px solid #fff0f5', boxShadow:'0 1px 4px rgba(255,119,160,0.08)'}}>
+                  <div style={{fontSize:12, fontWeight:700, color:'#ff77a0', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14}}>📚 Thông tin học phí</div>
+
+                  {/* Nhóm HỌC CHÍNH */}
+                  <div style={{background:'#fdf2f8', borderRadius:10, padding:'10px 14px', marginBottom: liveStudent.hasKem ? 10 : 0}}>
+                    <div style={{fontSize:11, fontWeight:700, color:'#be185d', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8}}>🎓 Học chính</div>
+                    <div style={{display:'flex', flexDirection:'column', gap:6}}>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:13}}>
+                        <span style={{color:'#9ca3af'}}>Số buổi</span>
+                        <span style={{fontWeight:600, color:'#1f2937'}}>{mainCount} buổi</span>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:13}}>
+                        <span style={{color:'#9ca3af'}}>HP / buổi</span>
+                        <span style={{fontWeight:600, color:'#1f2937'}}>{fmt(liveStudent.pricePerSession || 0)} đ</span>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:13, paddingTop:6, borderTop:'1px dashed #fbcfe8'}}>
+                        <span style={{color:'#be185d', fontWeight:600}}>Tổng HP chính</span>
+                        <span style={{fontWeight:700, color:'#be185d'}}>{fmt(mainCount * (liveStudent.pricePerSession || 0))} đ</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nhóm HỌC KÈM */}
+                  {liveStudent.hasKem && (
+                    <div style={{background:'#f5f3ff', borderRadius:10, padding:'10px 14px', marginBottom:10}}>
+                      <div style={{fontSize:11, fontWeight:700, color:'#6d28d9', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8}}>📖 Học kèm</div>
+                      <div style={{display:'flex', flexDirection:'column', gap:6}}>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:13}}>
+                          <span style={{color:'#9ca3af'}}>Số buổi</span>
+                          <span style={{fontWeight:600, color:'#1f2937'}}>{kemCount} buổi</span>
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:13}}>
+                          <span style={{color:'#9ca3af'}}>HP / buổi</span>
+                          <span style={{fontWeight:600, color:'#1f2937'}}>{fmt(liveStudent.kemPrice || 0)} đ</span>
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:13, paddingTop:6, borderTop:'1px dashed #ddd6fe'}}>
+                          <span style={{color:'#6d28d9', fontWeight:600}}>Tổng HP kèm</span>
+                          <span style={{fontWeight:700, color:'#6d28d9'}}>{fmt(kemCount * (liveStudent.kemPrice || 0))} đ</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tổng cộng */}
+                  <div style={{display:'flex', justifyContent:'space-between', fontSize:15, paddingTop:10, borderTop:'2px solid #fff0f5', marginTop:4}}>
+                    <span style={{color:'#374151', fontWeight:700}}>Tổng tháng {viewMonth}</span>
+                    <span style={{fontWeight:800, color:'#ff77a0', fontSize:16}}>
+                      {fmt((mainCount * (liveStudent.pricePerSession || 0)) + (kemCount * (liveStudent.kemPrice || 0)))} đ
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card thông tin học sinh */}
+                <div style={{background:'#fff', borderRadius:16, padding:'20px 24px', border:'1px solid #fff0f5', boxShadow:'0 1px 4px rgba(255,119,160,0.08)'}}>
+                  <div style={{fontSize:12, fontWeight:700, color:'#ff77a0', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14}}>🎓 Thông tin học sinh</div>
+                  <div style={{display:'flex', flexDirection:'column', gap:10}}>
+                    <div style={{display:'flex', gap:10, alignItems:'center'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:72}}>Họ tên</span>
+                      <span style={{fontSize:14, fontWeight:700, color:'#1f2937'}}>{liveStudent.name}</span>
+                    </div>
+                    <div style={{display:'flex', gap:10, alignItems:'center'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:72}}>Lớp</span>
+                      <span style={{fontSize:13, fontWeight:600, color:'#1f2937'}}>{activeClass.name}</span>
+                    </div>
+                    <div style={{display:'flex', gap:10, alignItems:'center'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:72}}>Năm sinh</span>
+                      <span style={{fontSize:13, fontWeight:600, color:'#1f2937'}}>
+                        {liveStudent.birthYear || <span style={{color:'#d1d5db', fontStyle:'italic'}}>Chưa có</span>}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card phụ huynh */}
+                <div style={{background:'#fff', borderRadius:16, padding:'20px 24px', border:'1px solid #fff0f5', boxShadow:'0 1px 4px rgba(255,119,160,0.08)'}}>
+                  <div style={{fontSize:12, fontWeight:700, color:'#ff77a0', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14}}>👨‍👩‍👧 Thông tin phụ huynh</div>
+                  <div style={{display:'flex', flexDirection:'column', gap:10}}>
+                    <div style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:60}}>Họ tên</span>
+                      <span style={{fontSize:13, fontWeight:600, color:'#1f2937', flex:1}}>
+                        {liveStudent.parentName || <span style={{color:'#d1d5db', fontStyle:'italic'}}>Chưa có</span>}
+                      </span>
+                    </div>
+                    <div style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:60}}>SĐT</span>
+                      <span style={{fontSize:13, fontWeight:600, color:'#1f2937', flex:1}}>
+                        {liveStudent.parentPhone
+                          ? <a href={`tel:${liveStudent.parentPhone}`} style={{color:'#2563eb', textDecoration:'none'}}>{liveStudent.parentPhone}</a>
+                          : <span style={{color:'#d1d5db', fontStyle:'italic'}}>Chưa có</span>}
+                      </span>
+                    </div>
+                    <div style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:60}}>Ghi chú</span>
+                      <span style={{fontSize:13, color:'#374151', flex:1, lineHeight:1.5}}>
+                        {liveStudent.note || <span style={{color:'#d1d5db', fontStyle:'italic'}}>Không có</span>}
+                      </span>
+                    </div>
+                  </div>
+                </div>
              </div>
 
              <div className="table-section">
@@ -1740,8 +2032,8 @@ function StudentPage({ classes, setClasses }) {
                                 <tr><td colSpan="3" className="center" style={{padding:20, color:'#9ca3af'}}>Tháng này chưa có buổi học nào</td></tr>
                             ) : (
                                 studentSessions.map((ses, idx) => {
-                                    const isMain = (ses.attendance || []).includes(viewStudentDetail.id);
-                                    const isKem = (ses.attendanceKem || []).includes(viewStudentDetail.id);
+                                    const isMain = (ses.attendance || []).includes(liveStudent.id);
+                                    const isKem = (ses.attendanceKem || []).includes(liveStudent.id);
                                     let status = <span style={{color:'#ef4444', fontWeight:500}}>Vắng</span>;
                                     if (isMain) status = <span className="status-badge paid" style={{cursor:'default'}}>Học chính</span>;
                                     else if (isKem) status = <span className="status-badge" style={{background:'#f3e8ff', color:'#7c3aed', border:'1px solid #d8b4fe', cursor:'default'}}>Học kèm</span>;
@@ -1767,6 +2059,389 @@ function StudentPage({ classes, setClasses }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// TIME PICKER — Custom dropdown giờ 0-23 + phút (không dùng native select)
+// ─────────────────────────────────────────────────────────────────
+
+function TimeDropdown({ options, value, onChange, width = 68 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Scroll to selected item when dropdown opens
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (open && listRef.current) {
+      const selected = listRef.current.querySelector('[data-selected="true"]');
+      if (selected) selected.scrollIntoView({ block: "center" });
+    }
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{position:'relative', width}}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width:'100%', padding:'9px 10px', border:'1.5px solid #ffd6e4',
+          borderRadius:9, fontSize:15, fontWeight:700, background:'#fff',
+          cursor:'pointer', textAlign:'center', color:'#1f2937',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:4,
+          outline:'none', transition:'border-color 0.15s',
+          ...(open ? {borderColor:'#ff77a0', boxShadow:'0 0 0 3px rgba(255,119,160,0.12)'} : {})
+        }}
+      >
+        {value}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d4a0b4" strokeWidth="2.5" style={{marginLeft:2, flexShrink:0, transform: open ? 'rotate(180deg)' : 'none', transition:'transform 0.15s'}}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {open && (
+        <ul ref={listRef} style={{
+          position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:200,
+          background:'#fff', border:'1.5px solid #ffd6e4', borderRadius:10,
+          boxShadow:'0 8px 24px rgba(255,119,160,0.18)',
+          maxHeight:200, overflowY:'auto', overflowX:'hidden',
+          padding:'4px 0', margin:0, listStyle:'none', width:'100%',
+          scrollbarWidth:'thin', scrollbarColor:'#ffd6e4 transparent'
+        }}>
+          {options.map(opt => {
+            const isSel = opt.value === value;
+            return (
+              <li key={opt.value}
+                data-selected={isSel}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                style={{
+                  padding:'7px 10px', fontSize:14, fontWeight: isSel ? 700 : 500,
+                  cursor:'pointer', textAlign:'center',
+                  background: isSel ? 'linear-gradient(135deg,#ff77a0,#ff4d88)' : 'transparent',
+                  color: isSel ? '#fff' : '#374151',
+                  borderRadius: isSel ? 6 : 0, margin: isSel ? '0 4px' : 0,
+                  transition:'background 0.1s',
+                }}
+                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background='#fff5f8'; }}
+                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background='transparent'; }}
+              >{opt.label}</li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TimePicker({ label, value, onChange }) {
+  const [h, m] = (value || "00:00").split(":").map(Number);
+
+  const hourOpts = Array.from({length:24}, (_, i) => ({
+    value: String(i).padStart(2,"0") + "h",
+    label: String(i).padStart(2,"0") + "h"
+  }));
+  const minOpts = [0,5,10,15,20,25,30,35,40,45,50,55].map(min => ({
+    value: String(min).padStart(2,"0") + "p",
+    label: String(min).padStart(2,"0")
+  }));
+
+  const curH = String(h).padStart(2,"0") + "h";
+  const curM = String(m).padStart(2,"0") + "p";
+
+  const update = (newH, newM) => {
+    const hh = newH.replace("h","");
+    const mm = newM.replace("p","");
+    onChange(`${hh}:${mm}`);
+  };
+
+  return (
+    <div>
+      {label && <label className="form-label">{label}</label>}
+      <div style={{display:'flex', alignItems:'center', gap:5}}>
+        <TimeDropdown options={hourOpts} value={curH} onChange={v => update(v, curM)} width={72} />
+        <span style={{fontWeight:700, color:'#d4a0b4', fontSize:16}}>:</span>
+        <TimeDropdown options={minOpts} value={curM} onChange={v => update(curH, v)} width={64} />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TIMETABLE PAGE
+// ─────────────────────────────────────────────────────────────────
+
+const LS_TIMETABLE = "diemdanh_timetable_v1";
+function loadTimetable() { try { return JSON.parse(localStorage.getItem(LS_TIMETABLE)) || []; } catch { return []; } }
+function saveTimetable(data) { try { localStorage.setItem(LS_TIMETABLE, JSON.stringify(data)); } catch {} }
+
+const DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+const DAY_KEYS = ["thu2", "thu3", "thu4", "thu5", "thu6", "thu7"];
+
+// Màu xanh lá đậm nhạt cho bảng (giống ảnh)
+const TBL_COLORS = [
+  "#2e7d50", "#388e5e", "#43a36c", "#4db87a",
+  "#56cc88", "#60e096", "#6af4a4", "#74ffb2",
+];
+
+function TimetablePage({ classes }) {
+  const [entries, setEntries] = useState(() => loadTimetable());
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ classId: "", day: "thu2", startTime: "07:30", endTime: "09:00" });
+
+  // Tự phân loại Sáng/Chiều/Tối dựa trên giờ bắt đầu
+  const getSession = (startTime) => {
+    if (!startTime) return "sang";
+    const h = parseInt(startTime.split(":")[0]);
+    if (h < 12) return "sang";
+    if (h < 18) return "chieu";
+    return "toi";
+  };
+  const [editId, setEditId] = useState(null);
+
+  // Tạo map màu theo classId
+  const classColorMap = useMemo(() => {
+    const map = {};
+    (classes || []).forEach((c, i) => { map[c.id] = TBL_COLORS[i % TBL_COLORS.length]; });
+    return map;
+  }, [classes]);
+
+  const handleSave = () => {
+    if (!form.classId) { alert("Vui lòng chọn lớp!"); return; }
+    if (!form.startTime || !form.endTime) { alert("Vui lòng chọn giờ bắt đầu và kết thúc!"); return; }
+    if (form.startTime >= form.endTime) { alert("Giờ bắt đầu phải nhỏ hơn giờ kết thúc!"); return; }
+
+    // Tự tính buổi từ giờ bắt đầu
+    const session = getSession(form.startTime);
+    const entry = { ...form, session, id: editId || Date.now().toString() };
+
+    let updated;
+    if (editId) {
+      updated = entries.map(e => e.id === editId ? entry : e);
+    } else {
+      updated = [...entries, entry];
+    }
+    setEntries(updated);
+    saveTimetable(updated);
+    setShowForm(false);
+    setEditId(null);
+    setForm({ classId: "", day: "thu2", startTime: "07:30", endTime: "09:00" });
+  };
+
+  const handleDelete = (id) => {
+    if (!confirm("Xoá lịch học này?")) return;
+    const updated = entries.filter(e => e.id !== id);
+    setEntries(updated);
+    saveTimetable(updated);
+  };
+
+  const openEdit = (entry) => {
+    setForm({ classId: entry.classId, day: entry.day, startTime: entry.startTime, endTime: entry.endTime });
+    setEditId(entry.id);
+    setShowForm(true);
+  };
+
+  // Build grid: session (sang/chieu/toi) x day
+  const grid = useMemo(() => {
+    const g = { sang: {}, chieu: {}, toi: {} };
+    DAY_KEYS.forEach(d => { g.sang[d] = []; g.chieu[d] = []; g.toi[d] = []; });
+    entries.forEach(e => {
+      // Ưu tiên tính lại từ startTime (bỏ qua session cũ nếu có)
+      const ses = getSession(e.startTime);
+      const d = e.day || "thu2";
+      if (g[ses] && g[ses][d] !== undefined) g[ses][d].push(e);
+    });
+    return g;
+  }, [entries]);
+
+  const getClassName = (classId) => (classes || []).find(c => c.id === classId)?.name || classId;
+
+  // Tính số hàng tối đa trong mỗi session để render đúng chiều cao
+  const maxSang = useMemo(() => Math.max(1, ...DAY_KEYS.map(d => grid.sang[d].length)), [grid]);
+  const maxChieu = useMemo(() => Math.max(1, ...DAY_KEYS.map(d => grid.chieu[d].length)), [grid]);
+  const maxToi = useMemo(() => Math.max(0, ...DAY_KEYS.map(d => grid.toi[d].length)), [grid]);
+  const hasToi = maxToi > 0;
+
+  return (
+    <div className="page-content">
+      {/* Topbar */}
+      <div className="page-topbar">
+        <div className="page-topbar-title">Thời Khóa Biểu</div>
+        <button className="btn-add-primary" onClick={() => { setEditId(null); setForm({ classId: "", day: "thu2", startTime: "07:30", endTime: "09:00" }); setShowForm(true); }}>
+          + Thêm lịch
+        </button>
+      </div>
+
+      {/* Timetable Grid */}
+      <div style={{margin:'0 32px', overflowX:'auto'}}>
+        <table className="tkb-table">
+          <thead>
+            <tr>
+              <th className="tkb-th-session"></th>
+              {DAYS.map((d, i) => (
+                <th key={i} className="tkb-th-day">{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {/* SÁNG */}
+            {Array.from({length: maxSang}).map((_, rowIdx) => (
+              <tr key={`sang-${rowIdx}`}>
+                {rowIdx === 0 && (
+                  <td className="tkb-session-label" rowSpan={maxSang}>Sáng</td>
+                )}
+                {DAY_KEYS.map(dk => {
+                  const cellEntries = grid.sang[dk];
+                  const e = cellEntries[rowIdx];
+                  return (
+                    <td key={dk} className="tkb-cell" style={{background: e ? classColorMap[e.classId] + "22" : "#e8f5ee"}}>
+                      {e ? (
+                        <div className="tkb-entry" style={{borderLeft: `3px solid ${classColorMap[e.classId] || '#2e7d50'}`}}>
+                          <div className="tkb-entry-name" style={{color: classColorMap[e.classId] || '#2e7d50'}}>{getClassName(e.classId)}</div>
+                          <div className="tkb-entry-time">{e.startTime} – {e.endTime}</div>
+                          <div className="tkb-entry-actions">
+                            <button onClick={() => openEdit(e)} title="Sửa" className="tkb-btn-edit"><Icon name="edit" size={12}/></button>
+                            <button onClick={() => handleDelete(e.id)} title="Xoá" className="tkb-btn-del"><Icon name="trash" size={12}/></button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {/* CHIỀU */}
+            {Array.from({length: maxChieu}).map((_, rowIdx) => (
+              <tr key={`chieu-${rowIdx}`}>
+                {rowIdx === 0 && (
+                  <td className="tkb-session-label" rowSpan={maxChieu}>Chiều</td>
+                )}
+                {DAY_KEYS.map(dk => {
+                  const cellEntries = grid.chieu[dk];
+                  const e = cellEntries[rowIdx];
+                  return (
+                    <td key={dk} className="tkb-cell" style={{background: e ? classColorMap[e.classId] + "22" : "#e8f5ee"}}>
+                      {e ? (
+                        <div className="tkb-entry" style={{borderLeft: `3px solid ${classColorMap[e.classId] || '#2e7d50'}`}}>
+                          <div className="tkb-entry-name" style={{color: classColorMap[e.classId] || '#2e7d50'}}>{getClassName(e.classId)}</div>
+                          <div className="tkb-entry-time">{e.startTime} – {e.endTime}</div>
+                          <div className="tkb-entry-actions">
+                            <button onClick={() => openEdit(e)} title="Sửa" className="tkb-btn-edit"><Icon name="edit" size={12}/></button>
+                            <button onClick={() => handleDelete(e.id)} title="Xoá" className="tkb-btn-del"><Icon name="trash" size={12}/></button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {/* TỐI — chỉ render nếu có dữ liệu */}
+            {hasToi && Array.from({length: maxToi}).map((_, rowIdx) => (
+              <tr key={`toi-${rowIdx}`}>
+                {rowIdx === 0 && (
+                  <td className="tkb-session-label tkb-session-toi" rowSpan={maxToi}>Tối</td>
+                )}
+                {DAY_KEYS.map(dk => {
+                  const cellEntries = grid.toi[dk];
+                  const e = cellEntries[rowIdx];
+                  return (
+                    <td key={dk} className="tkb-cell tkb-cell-toi" style={{background: e ? classColorMap[e.classId] + "22" : "#e8eaf6"}}>
+                      {e ? (
+                        <div className="tkb-entry" style={{borderLeft: `3px solid ${classColorMap[e.classId] || '#3949ab'}`}}>
+                          <div className="tkb-entry-name" style={{color: classColorMap[e.classId] || '#3949ab'}}>{getClassName(e.classId)}</div>
+                          <div className="tkb-entry-time">{e.startTime} – {e.endTime}</div>
+                          <div className="tkb-entry-actions">
+                            <button onClick={() => openEdit(e)} title="Sửa" className="tkb-btn-edit"><Icon name="edit" size={12}/></button>
+                            <button onClick={() => handleDelete(e.id)} title="Xoá" className="tkb-btn-del"><Icon name="trash" size={12}/></button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {entries.length === 0 && (
+        <div className="empty-state" style={{marginTop:20}}>
+          <div className="empty-state-icon">📅</div>
+          <div>Chưa có lịch học nào. Nhấn <b>+ Thêm lịch</b> để bắt đầu!</div>
+        </div>
+      )}
+
+      {/* Form Modal */}
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal-dialog" style={{width: 460}} onClick={e => e.stopPropagation()}>
+            <div className="modal-dialog-header">{editId ? "Sửa lịch học" : "Thêm lịch học mới"}</div>
+            <div className="modal-dialog-body" style={{display:'flex', flexDirection:'column', gap:14}}>
+
+              <div>
+                <label className="form-label">Lớp học</label>
+                <select className="form-input" value={form.classId} onChange={e => setForm(f => ({...f, classId: e.target.value}))}>
+                  <option value="">-- Chọn lớp --</option>
+                  {(classes || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label">Thứ trong tuần</label>
+                <select className="form-input" value={form.day} onChange={e => setForm(f => ({...f, day: e.target.value}))}>
+                  {DAYS.map((d, i) => <option key={i} value={DAY_KEYS[i]}>{d}</option>)}
+                </select>
+              </div>
+
+              <div className="form-grid-2">
+                <TimePicker
+                  label="Giờ bắt đầu"
+                  value={form.startTime}
+                  onChange={v => setForm(f => ({...f, startTime: v}))}
+                />
+                <TimePicker
+                  label="Giờ kết thúc"
+                  value={form.endTime}
+                  onChange={v => setForm(f => ({...f, endTime: v}))}
+                />
+              </div>
+
+              {/* Auto-detect session preview */}
+              {form.startTime && (
+                <div style={{display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:8,
+                  background: getSession(form.startTime) === 'sang' ? '#f0fdf4' : getSession(form.startTime) === 'chieu' ? '#fffbeb' : '#eef2ff',
+                  border: `1px solid ${getSession(form.startTime) === 'sang' ? '#bbf7d0' : getSession(form.startTime) === 'chieu' ? '#fde68a' : '#c7d2fe'}`
+                }}>
+                  <span style={{fontSize:16}}>
+                    {getSession(form.startTime) === 'sang' ? '🌅' : getSession(form.startTime) === 'chieu' ? '🌤️' : '🌙'}
+                  </span>
+                  <span style={{fontSize:13, fontWeight:600,
+                    color: getSession(form.startTime) === 'sang' ? '#16a34a' : getSession(form.startTime) === 'chieu' ? '#d97706' : '#4338ca'
+                  }}>
+                    Tự động xếp vào buổi: <b>{getSession(form.startTime) === 'sang' ? 'Sáng' : getSession(form.startTime) === 'chieu' ? 'Chiều' : 'Tối'}</b>
+                  </span>
+                  <span style={{fontSize:12, color:'#9ca3af', marginLeft:'auto'}}>
+                    {getSession(form.startTime) === 'sang' ? '00:00–11:59' : getSession(form.startTime) === 'chieu' ? '12:00–17:59' : '18:00–23:59'}
+                  </span>
+                </div>
+              )}
+
+            </div>
+            <div className="modal-dialog-footer">
+              <button className="btn-cancel" onClick={() => setShowForm(false)}>Huỷ</button>
+              <button className="btn-save" onClick={handleSave}>{editId ? "Lưu" : "Thêm"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // APP
 // ─────────────────────────────────────────────────────────────────
 
@@ -1788,6 +2463,7 @@ function App() {
               {page === "tuition" && "Học Phí"}
               {page === "students" && "Học Sinh"}
               {page === "data" && "Dữ Liệu"}
+              {page === "timetable" && "Thời Khóa Biểu"}
             </span>
           </div>
           {/* Added Entry Point for Data Import/Export */}
@@ -1801,6 +2477,7 @@ function App() {
         {page === "tuition" && <TuitionPage classes={classes} />}
         {page === "students" && <StudentPage classes={classes} setClasses={setClasses} />}
         {page === "data" && <DataPage classes={classes} setClasses={setClasses} />}
+        {page === "timetable" && <TimetablePage classes={classes} />}
       </main>
     </div>
   );
