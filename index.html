@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Lớp Học</title>
+    <title>EduManagement</title>
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -16,9 +16,38 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <!-- SheetJS (XLSX) -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <!-- jsPDF + AutoTable for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script>
+      firebase.initializeApp({
+        apiKey: "AIzaSyApsLv_N7Je30jz6CRxKX8PmsHyEY5Z4h0",
+        authDomain: "edumanagement-f3e21.firebaseapp.com",
+        projectId: "edumanagement-f3e21",
+        storageBucket: "edumanagement-f3e21.firebasestorage.app",
+        messagingSenderId: "403485514258",
+        appId: "1:403485514258:web:b384a6a8edcc40c0da96cb"
+      });
+      window.db   = firebase.firestore();
+      window.auth = firebase.auth();
+    </script>
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="images/favicon.svg">
+
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="images/favicon-96x96.png">
+    <link rel="shortcut icon" type="image/x-icon" href="images/favicon.ico">
+    <link rel="apple-touch-icon" href="images/apple-icon.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="images/apple-icon-114x114.png">
+    <meta name="msapplication-TileImage" content="images/favicon-96x96.png">
+    <meta name="msapplication-TileColor" content="#4f7fff">
+    <meta name="theme-color" content="#4f7fff">
 </head>
 <body>
     <div id="root"></div>
@@ -119,7 +148,22 @@
         </defs>
     </svg>
 
-    <!-- Main Script -->
-    <script type="text/babel" src="script.js"></script>
+    <!-- App Modules (thứ tự quan trọng: dependencies trước) -->
+    <script type="text/babel" src="js/utils.js"></script>
+    <script type="text/babel" src="js/firebase.js"></script>
+    <script type="text/babel" src="js/components.js"></script>
+    <script type="text/babel" src="js/TimePicker.js"></script>
+    <script type="text/babel" src="js/receipt.js"></script>
+    <script type="text/babel" src="js/router.js"></script>
+    <script type="text/babel" src="js/pages/HomePage.js"></script>
+    <script type="text/babel" src="js/pages/AttendancePage.js"></script>
+    <script type="text/babel" src="js/pages/TuitionPage.js"></script>
+    <script type="text/babel" src="js/pages/StudentPage.js"></script>
+    <script type="text/babel" src="js/pages/TimetablePage.js"></script>
+    <script type="text/babel" src="js/pages/DataPage.js"></script>
+    <script type="text/babel" src="js/pages/ProfilePage.js"></script>
+    <script type="text/babel" src="js/pages/LoginPage.js"></script>
+    <script type="text/babel" src="js/pages/AdminPage.js"></script>
+    <script type="text/babel" src="js/App.js"></script>
 </body>
 </html>
