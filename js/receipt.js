@@ -1,9 +1,9 @@
 // RECEIPT
 // ─────────────────────────────────────────────────────────────────
-function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context }) {
+function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context, profile: profileProp }) {
   const timeTitle = `Tháng ${context?.month}/${context?.year}`;
   const hasKem = student.hasKem && student.kemSessions > 0;
-  const profile = loadProfile();
+  const profile = profileProp || loadProfile(); // dùng prop nếu có, fallback localStorage
   const addrText = profile.phone || profile.teacherName
     ? `Số điện thoại: ${profile.phone || ""}${profile.teacherName ? ' - ' + profile.teacherName : ''}`
     : "";
@@ -120,17 +120,14 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context }) {
   );
 }
 
-function renderReceiptToCanvas(student, bankInfo, qrCodeUrl, context) {
+function renderReceiptToCanvas(student, bankInfo, qrCodeUrl, context, profile) {
   return new Promise((resolve, reject) => {
-    // 1. Tạo container ẩn
     const wrap = document.createElement("div");
-    // Đặt ở vị trí cố định nhưng ngoài màn hình
     wrap.style.cssText = "position:fixed;left:-9999px;top:0;width:1080px;pointer-events:none;z-index:-1;";
     document.body.appendChild(wrap);
     
-    // 2. Render React Component vào container
     const tmpRoot = ReactDOM.createRoot(wrap);
-    tmpRoot.render(React.createElement(ReceiptMarkup, { student, bankInfo, qrCodeUrl, context }));
+    tmpRoot.render(React.createElement(ReceiptMarkup, { student, bankInfo, qrCodeUrl, context, profile }));
 
     // 3. Chờ DOM cập nhật
     const capture = () => {

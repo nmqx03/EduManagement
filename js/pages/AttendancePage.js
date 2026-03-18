@@ -105,6 +105,12 @@ function AttendancePage({ classes, setClasses, navigate, hashParts, user, passco
   const saveSession = () => {
     if (!newSessionDate) return;
 
+    // Kiểm tra ngày trùng (chỉ khi thêm mới)
+    if (!editingSessionId) {
+      const duplicate = (activeClass?.sessions || []).some(s => s.date === newSessionDate);
+      if (duplicate) { alert(`❌ Ngày ${newSessionDate} đã có buổi học. Vui lòng chọn ngày khác.`); return; }
+    }
+
     let updated;
     if (editingSessionId) {
         // Edit Mode

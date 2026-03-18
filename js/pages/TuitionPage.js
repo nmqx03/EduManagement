@@ -14,16 +14,24 @@ function TuitionPage({ classes, user }) {
   const [preview, setPreview] = useState(false);
   const [copyState, setCopyState] = useState({});
   const [toast, setToast] = useState(null);
+  const [profile, setProfile] = useState(() => loadProfile()); // profile, sync từ Firestore
 
   // Filters & ZIP
   const [filter, setFilter] = useState("all"); // 'all', 'paid', 'unpaid'
   const [isZipping, setIsZipping] = useState(false);
 
-  const bankInfo = useMemo(() => {
-    const p = loadProfile();
-    return { bank: p.bank, account: p.account, owner: p.owner };
-  }, []);
-  const qrCodeUrl = useMemo(() => loadProfile().qrDataUrl || "", []);
+  // Load profile từ Firestore khi mount — đảm bảo thông tin receipt luôn mới nhất
+  useEffect(() => {
+    if (!user) return;
+    loadProfileFromDB(user.uid).then(p => { if (p) setProfile(p); });
+  }, [user]);
+
+  const bankInfo = useMemo(() => ({
+    bank: profile.bank || "",
+    account: profile.account || "",
+    owner: profile.owner || ""
+  }), [profile]);
+  const qrCodeUrl = useMemo(() => profile.qrDataUrl || "", [profile]);
 
   const availableYears = useMemo(() => {
     const s = new Set();
@@ -134,7 +142,7 @@ function TuitionPage({ classes, user }) {
     setTimeout(async () => {
         try {
             const context = { year: selYear, month: selMonth };
-            const canvas = await renderReceiptToCanvas(student, bankInfo, qrCodeUrl, context);
+            const canvas = await renderReceiptToCanvas(student, bankInfo, qrCodeUrl, context, profile);
             canvas.toBlob(async (blob) => {
                 await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
                 setCopyState(prev => ({ ...prev, [key]: "copied" }));
@@ -150,7 +158,7 @@ function TuitionPage({ classes, user }) {
   const downloadReceipt = async () => {
       if (!selected) return;
       const context = { year: selYear, month: selMonth };
-      const canvas = await renderReceiptToCanvas(selected, bankInfo, qrCodeUrl, context);
+      const canvas = await renderReceiptToCanvas(selected, bankInfo, qrCodeUrl, context, profile);
       const link = document.createElement('a');
       link.download = `HocPhi_${selected.name}_${selMonth}_${selYear}.png`;
       link.href = canvas.toDataURL("image/png");
@@ -176,7 +184,7 @@ function TuitionPage({ classes, user }) {
         const s = list[i];
         try {
             const context = { year: selYear, month: selMonth };
-            const canvas = await renderReceiptToCanvas(s, bankInfo, qrCodeUrl, context);
+            const canvas = await renderReceiptToCanvas(s, bankInfo, qrCodeUrl, context, profile);
             
             // Canvas to Blob
             const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
@@ -383,7 +391,7 @@ function TuitionPage({ classes, user }) {
                 <div className="receipt-preview-container">
                     <div className="receipt-scale-wrapper">
                         <ReceiptMarkup 
-                            student={selected} bankInfo={bankInfo} qrCodeUrl={qrCodeUrl}
+                            student={selected} bankInfo={bankInfo} qrCodeUrl={qrCodeUrl} profile={profile}
                             context={{year: selYear, month: selMonth}}
                         />
                     </div>
@@ -391,7 +399,7 @@ function TuitionPage({ classes, user }) {
                 <div className="modal-actions">
                     <button className="btn-dark" onClick={downloadReceipt}>⬇️ Tải ảnh</button>
                     <button className="btn-dark" onClick={async () => {
-                        const canvas = await renderReceiptToCanvas(selected, bankInfo, qrCodeUrl, {year: selYear, month: selMonth});
+                        const canvas = await renderReceiptToCanvas(selected, bankInfo, qrCodeUrl, {year: selYear, month: selMonth}, profile);
                         canvas.toBlob(blob => { navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]).then(() => alert("Copied!")); });
                     }}>📋 Copy</button>
                 </div>

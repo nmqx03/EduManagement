@@ -95,7 +95,6 @@ function StudentPage({ classes, setClasses, user, passcodeUnlocked, setPasscodeU
           return {
             ...c,
             students: c.students.filter(s => s.id !== studentId),
-            // Xóa studentId khỏi tất cả buổi điểm danh
             sessions: (c.sessions || []).map(ses => ({
               ...ses,
               attendance: (ses.attendance || []).filter(id => id !== studentId),
@@ -105,6 +104,11 @@ function StudentPage({ classes, setClasses, user, passcodeUnlocked, setPasscodeU
         });
         setClasses(updated);
         setPasscodeGate(null);
+        // Nếu đang xem chi tiết học sinh vừa xóa → quay về danh sách
+        if (viewStudentDetail && viewStudentDetail.id === studentId) {
+          setViewStudentDetail(null);
+          setStep(1);
+        }
       }
     });
   };
@@ -337,7 +341,7 @@ function StudentPage({ classes, setClasses, user, passcodeUnlocked, setPasscodeU
         )}
 
         {/* Modal xác nhận đổi tên — cảnh báo mã học viên thay đổi */}
-        {showConfirmRename && (() => {
+        {showConfirmRename && (()=>{
           const cls = classes.find(c => c.id === editingClassId);
           const newShort = editingClassName.trim().replace(/\s+/g, '');
           const sampleOld = cls?.students?.[0]?.studentCode || ('01' + (cls?.name || '').replace(/\s+/g,''));
@@ -352,17 +356,19 @@ function StudentPage({ classes, setClasses, user, passcodeUnlocked, setPasscodeU
                   <div style={{textAlign:'center', marginBottom:16}}>
                     <div style={{fontSize:32, marginBottom:8}}>🔄</div>
                     <div style={{fontSize:14, color:'#374151', fontWeight:600}}>
-                      Mã học viên của {cls?.students?.length} học sinh sẽ được cấp lại
+                      Mã học viên của {cls?.students?.length || 0} học sinh sẽ được cấp lại
                     </div>
                   </div>
-                  <div style={{background:'#fef9c3', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', fontSize:13}}>
-                    <div style={{marginBottom:6}}>Ví dụ mã học viên sau khi đổi:</div>
-                    <div style={{display:'flex', alignItems:'center', gap:10, fontFamily:'monospace', fontWeight:700}}>
-                      <span style={{color:'#ef4444', textDecoration:'line-through'}}>{sampleOld}</span>
-                      <span style={{color:'#9ca3af'}}>→</span>
-                      <span style={{color:'#16a34a'}}>{sampleNew}</span>
+                  {(cls?.students?.length || 0) > 0 && (
+                    <div style={{background:'#fef9c3', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', fontSize:13}}>
+                      <div style={{marginBottom:6}}>Ví dụ mã học viên sau khi đổi:</div>
+                      <div style={{display:'flex', alignItems:'center', gap:10, fontFamily:'monospace', fontWeight:700}}>
+                        <span style={{color:'#ef4444', textDecoration:'line-through'}}>{sampleOld}</span>
+                        <span style={{color:'#9ca3af'}}>→</span>
+                        <span style={{color:'#16a34a'}}>{sampleNew}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <div className="modal-dialog-footer">
                   <button className="btn-cancel" onClick={() => setShowConfirmRename(false)}>Huỷ</button>
