@@ -1,13 +1,14 @@
 // STUDENT MANAGEMENT PAGE
 // ─────────────────────────────────────────────────────────────────
 
-function StudentPage({ classes, setClasses, user }) {
+function StudentPage({ classes, setClasses, user, passcodeUnlocked, setPasscodeUnlocked }) {
   const [step, setStep] = useState(0);
   const [selClassId, setSelClassId] = useState(null);
 
   // Class Add/Edit State
   const [showAddClass, setShowAddClass] = useState(false);
   const [showEditClass, setShowEditClass] = useState(false);
+  const [showConfirmRename, setShowConfirmRename] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [editingClassName, setEditingClassName] = useState("");
   const [editingClassId, setEditingClassId] = useState(null);
@@ -91,7 +92,16 @@ function StudentPage({ classes, setClasses, user }) {
       onConfirm: () => {
         const updated = classes.map(c => {
           if (c.id !== selClassId) return c;
-          return { ...c, students: c.students.filter(s => s.id !== studentId) };
+          return {
+            ...c,
+            students: c.students.filter(s => s.id !== studentId),
+            // Xóa studentId khỏi tất cả buổi điểm danh
+            sessions: (c.sessions || []).map(ses => ({
+              ...ses,
+              attendance: (ses.attendance || []).filter(id => id !== studentId),
+              attendanceKem: (ses.attendanceKem || []).filter(id => id !== studentId)
+            }))
+          };
         });
         setClasses(updated);
         setPasscodeGate(null);
@@ -106,6 +116,7 @@ function StudentPage({ classes, setClasses, user }) {
   };
 
   const openEditModal = (student) => {
+    const doOpen = () => {
       setModalMode("edit");
       setEditingStudent(student);
       setFormData({
@@ -116,9 +127,19 @@ function StudentPage({ classes, setClasses, user }) {
           parentName: student.parentName || "",
           parentPhone: student.parentPhone || "",
           note: student.note || "",
-          birthYear: student.birthYear || ""
+          birthYear: student.birthYear || "",
+          inactive: !!student.inactive
       });
       setShowModal(true);
+    };
+
+    if (passcodeUnlocked) { doOpen(); return; }
+
+    setPasscodeGate({
+      title: "Sửa thông tin học sinh",
+      message: `Nhập passcode để sửa thông tin của "${student.name}"`,
+      onConfirm: () => { setPasscodeGate(null); doOpen(); }
+    });
   };
 
   const handleSave = () => {
@@ -130,8 +151,13 @@ function StudentPage({ classes, setClasses, user }) {
           if (c.id !== selClassId) return c;
           
           if (modalMode === "add") {
+              // Tạo mã học viên: STT 2 chữ số + tên lớp, VD: 01E2019
+              const nextNum = (c.students || []).length + 1;
+              const studentCode = String(nextNum).padStart(2, '0') + c.name.replace(/\s+/g, '');
+
               const newStudent = {
                   id: Date.now().toString(),
+                  studentCode,
                   name: formData.name.trim(),
                   pricePerSession: price,
                   hasKem: formData.hasKem,
@@ -140,7 +166,7 @@ function StudentPage({ classes, setClasses, user }) {
                   parentPhone: (formData.parentPhone || "").trim(),
                   note: (formData.note || "").trim(),
                   birthYear: (formData.birthYear || "").trim(),
-                  days: [] // Default empty schedule
+                  days: []
               };
               return { ...c, students: [...(c.students || []), newStudent] };
           } else {
@@ -155,7 +181,8 @@ function StudentPage({ classes, setClasses, user }) {
                       parentName: (formData.parentName || "").trim(),
                       parentPhone: (formData.parentPhone || "").trim(),
                       note: (formData.note || "").trim(),
-                      birthYear: (formData.birthYear || "").trim()
+                      birthYear: (formData.birthYear || "").trim(),
+                      inactive: !!formData.inactive
                   })
               };
           }
@@ -167,20 +194,44 @@ function StudentPage({ classes, setClasses, user }) {
 
   const addNewClass = () => {
     if (!newClassName.trim()) return;
-    const cls = { id: Date.now().toString(), name: newClassName.trim(), students: [], sessions: [] };
-    const updated = [...classes, cls];
-    setClasses(updated);
+    const name = newClassName.trim();
+    const duplicate = classes.some(c => c.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) { alert(`❌ Tên lớp "${name}" đã tồn tại. Vui lòng chọn tên khác.`); return; }
+    const cls = { id: Date.now().toString(), name, students: [], sessions: [] };
+    setClasses([...classes, cls]);
     setNewClassName(""); setShowAddClass(false);
   };
 
   const handleRenameClass = () => {
-      if (!editingClassName.trim()) return;
-      const targetId = editingClassId;
-      const updated = classes.map(c => c.id === targetId ? { ...c, name: editingClassName.trim() } : c);
-      setClasses(updated);
-      setShowEditClass(false);
-      setEditingClassId(null);
-  }
+    if (!editingClassName.trim()) return;
+    const name = editingClassName.trim();
+    const duplicate = classes.some(c => c.id !== editingClassId && c.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) { alert(`❌ Tên lớp "${name}" đã tồn tại. Vui lòng chọn tên khác.`); return; }
+    // Kiểm tra có học sinh không → hiện cảnh báo mã thay đổi
+    const cls = classes.find(c => c.id === editingClassId);
+    if (cls && (cls.students || []).length > 0) {
+      setShowConfirmRename(true);
+    } else {
+      doRenameClass(name);
+    }
+  };
+
+  const doRenameClass = (name) => {
+    const newShort = (name || editingClassName.trim()).replace(/\s+/g, '');
+    const updated = classes.map(c => {
+      if (c.id !== editingClassId) return c;
+      // Cập nhật tên lớp + cấp lại mã học viên cho tất cả học sinh
+      const updatedStudents = (c.students || []).map((s, idx) => ({
+        ...s,
+        studentCode: String(idx + 1).padStart(2, '0') + newShort
+      }));
+      return { ...c, name: name || editingClassName.trim(), students: updatedStudents };
+    });
+    setClasses(updated);
+    setShowEditClass(false);
+    setShowConfirmRename(false);
+    setEditingClassId(null);
+  };
 
   const openDeleteModal = (cls) => {
     setPasscodeGate({
@@ -266,15 +317,15 @@ function StudentPage({ classes, setClasses, user }) {
           </div>
         )}
         
-        {/* Modal Rename Class (Moved here for editing from list) */}
+        {/* Modal Rename Class */}
         {showEditClass && (
           <div className="modal-overlay" onClick={() => setShowEditClass(false)}>
             <div className="modal-dialog" onClick={e => e.stopPropagation()}>
               <div className="modal-dialog-header">Đổi tên lớp</div>
               <div className="modal-dialog-body">
                 <label className="form-label">Tên lớp mới</label>
-                <input className="form-input" autoFocus value={editingClassName} 
-                    onChange={e => setEditingClassName(e.target.value)} 
+                <input className="form-input" autoFocus value={editingClassName}
+                    onChange={e => setEditingClassName(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleRenameClass()} />
               </div>
               <div className="modal-dialog-footer">
@@ -285,6 +336,46 @@ function StudentPage({ classes, setClasses, user }) {
           </div>
         )}
 
+        {/* Modal xác nhận đổi tên — cảnh báo mã học viên thay đổi */}
+        {showConfirmRename && (() => {
+          const cls = classes.find(c => c.id === editingClassId);
+          const newShort = editingClassName.trim().replace(/\s+/g, '');
+          const sampleOld = cls?.students?.[0]?.studentCode || ('01' + (cls?.name || '').replace(/\s+/g,''));
+          const sampleNew = '01' + newShort;
+          return (
+            <div className="modal-overlay" onClick={() => setShowConfirmRename(false)}>
+              <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+                <div className="modal-dialog-header" style={{background:'linear-gradient(135deg,#f59e0b,#d97706)'}}>
+                  ⚠️ Xác nhận đổi tên lớp
+                </div>
+                <div className="modal-dialog-body">
+                  <div style={{textAlign:'center', marginBottom:16}}>
+                    <div style={{fontSize:32, marginBottom:8}}>🔄</div>
+                    <div style={{fontSize:14, color:'#374151', fontWeight:600}}>
+                      Mã học viên của {cls?.students?.length} học sinh sẽ được cấp lại
+                    </div>
+                  </div>
+                  <div style={{background:'#fef9c3', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', fontSize:13}}>
+                    <div style={{marginBottom:6}}>Ví dụ mã học viên sau khi đổi:</div>
+                    <div style={{display:'flex', alignItems:'center', gap:10, fontFamily:'monospace', fontWeight:700}}>
+                      <span style={{color:'#ef4444', textDecoration:'line-through'}}>{sampleOld}</span>
+                      <span style={{color:'#9ca3af'}}>→</span>
+                      <span style={{color:'#16a34a'}}>{sampleNew}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-dialog-footer">
+                  <button className="btn-cancel" onClick={() => setShowConfirmRename(false)}>Huỷ</button>
+                  <button className="btn-save" style={{background:'linear-gradient(135deg,#f59e0b,#d97706)'}}
+                    onClick={() => doRenameClass(editingClassName.trim())}>
+                    Xác nhận đổi tên
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* PasscodeGate — dùng chung cho xóa lớp và học sinh */}
         {passcodeGate && (
           <PasscodeGate
@@ -293,6 +384,8 @@ function StudentPage({ classes, setClasses, user }) {
             onConfirm={passcodeGate.onConfirm}
             onCancel={() => setPasscodeGate(null)}
             userUid={user && user.uid}
+            passcodeUnlocked={passcodeUnlocked}
+            setPasscodeUnlocked={setPasscodeUnlocked}
           />
         )}
       </div>
@@ -344,6 +437,7 @@ function StudentPage({ classes, setClasses, user }) {
             <table className="students-table">
               <colgroup>
                 <col style={{width:52}}/>
+                <col style={{width:72}}/>
                 <col/>
                 <col style={{width:100}}/>
                 <col style={{width:110}}/>
@@ -356,6 +450,7 @@ function StudentPage({ classes, setClasses, user }) {
               <thead>
                 <tr>
                   <th className="center" rowSpan={2} style={{verticalAlign:'middle'}}>STT</th>
+                  <th className="center" rowSpan={2} style={{verticalAlign:'middle', color:'#6b7280', fontSize:11}}>MÃ HV</th>
                   <th rowSpan={2} style={{verticalAlign:'middle'}}>HỌ VÀ TÊN</th>
                   <th className="center" colSpan={3} style={{background:'#dbeafe', color:'#1d4ed8', borderBottom:'2px solid #bfdbfe'}}>HỌC CHÍNH</th>
                   <th className="center" colSpan={3} style={{background:'#ede9fe', color:'#6d28d9', borderBottom:'2px solid #ddd6fe'}}>HỌC KÈM</th>
@@ -372,7 +467,7 @@ function StudentPage({ classes, setClasses, user }) {
               </thead>
               <tbody>
                 {studentsWithStats.length === 0 ? (
-                    <tr><td colSpan="9" className="center" style={{padding:20, color:'#9ca3af'}}>Không tìm thấy học sinh</td></tr>
+                    <tr><td colSpan="10" className="center" style={{padding:20, color:'#9ca3af'}}>Không tìm thấy học sinh</td></tr>
                 ) : (
                     studentsWithStats.slice((stuPage-1)*STUDENTS_PER_PAGE, stuPage*STUDENTS_PER_PAGE).map((s, i) => (
                         <tr key={s.id} className="student-row" onClick={() => {
@@ -380,7 +475,13 @@ function StudentPage({ classes, setClasses, user }) {
                             setStep(2);
                         }}>
                           <td className="center stt-cell">{(stuPage-1)*STUDENTS_PER_PAGE + i + 1}</td>
-                          <td className="name-cell">{s.name}</td>
+                          <td className="center" style={{fontSize:11, color:'#9ca3af', fontWeight:600}}>{s.studentCode || '—'}</td>
+                          <td className="name-cell">
+                            <span>{s.name}</span>
+                            {s.inactive && (
+                              <span style={{marginLeft:8, fontSize:11, fontWeight:600, color:'#ef4444', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:4, padding:'1px 6px'}}>Đã nghỉ</span>
+                            )}
+                          </td>
                           <td className="center">{s.mainCount}</td>
                           <td className="right price-cell">{fmt(s.pricePerSession)}</td>
                           <td className="right" style={{fontWeight:600, color:'#1f2937'}}>{fmt(s.mainFee)}</td>
@@ -438,6 +539,11 @@ function StudentPage({ classes, setClasses, user }) {
             <div className="modal-dialog" onClick={e => e.stopPropagation()}>
               <div className="modal-dialog-header">{modalMode === "add" ? "Thêm học sinh mới" : "Sửa thông tin"}</div>
               <div className="modal-dialog-body">
+                {modalMode === "edit" && editingStudent?.studentCode && (
+                  <div style={{fontSize:12, color:'#6b7280', marginBottom:12, padding:'6px 10px', background:'#f8fafc', borderRadius:6, border:'1px solid #e2e8f0'}}>
+                    Mã học viên: <b style={{color:'#4f7fff'}}>{editingStudent.studentCode}</b>
+                  </div>
+                )}
                 <label className="form-label">Tên học sinh</label>
                 <input className="form-input" autoFocus value={formData.name || ""}
                   onChange={e => setFormData(f => ({ ...f, name: e.target.value }))} 
@@ -493,6 +599,25 @@ function StudentPage({ classes, setClasses, user }) {
                     style={{resize: 'vertical', fontFamily: 'inherit'}}
                     onChange={e => setFormData(f => ({ ...f, note: e.target.value }))} />
                 </div>
+
+                {/* Trạng thái nghỉ học — chỉ hiện khi sửa */}
+                {modalMode === "edit" && (
+                  <div style={{marginTop:18, paddingTop:14, borderTop:'1.5px solid #bfdbfe'}}>
+                    <label style={{display:'flex', alignItems:'center', gap:10, cursor:'pointer'}}>
+                      <input type="checkbox" checked={!!formData.inactive}
+                        onChange={e => setFormData(f => ({...f, inactive: e.target.checked}))}
+                        style={{width:16, height:16, accentColor:'#ef4444'}} />
+                      <span style={{fontSize:14, fontWeight:600, color: formData.inactive ? '#ef4444' : '#374151'}}>
+                        🚫 Đã nghỉ học
+                      </span>
+                    </label>
+                    {formData.inactive && (
+                      <div style={{fontSize:12, color:'#ef4444', marginTop:6, marginLeft:26}}>
+                        Học sinh này sẽ không hiển thị ở Điểm Danh và Học Phí
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="modal-dialog-footer">
                 <button className="btn-cancel" onClick={() => setShowModal(false)}>Huỷ</button>
@@ -510,6 +635,8 @@ function StudentPage({ classes, setClasses, user }) {
             onConfirm={passcodeGate.onConfirm}
             onCancel={() => setPasscodeGate(null)}
             userUid={user && user.uid}
+            passcodeUnlocked={passcodeUnlocked}
+            setPasscodeUnlocked={setPasscodeUnlocked}
           />
         )}
       </div>
@@ -596,6 +723,10 @@ function StudentPage({ classes, setClasses, user }) {
                 <div style={{background:'#fff', borderRadius:16, padding:'20px 24px', border:'1px solid #eff6ff', boxShadow:'0 1px 4px rgba(79,127,255,0.08)'}}>
                   <div style={{fontSize:12, fontWeight:700, color:'#4f7fff', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14}}>🎓 Thông tin học sinh</div>
                   <div style={{display:'flex', flexDirection:'column', gap:10}}>
+                    <div style={{display:'flex', gap:10, alignItems:'center'}}>
+                      <span style={{fontSize:13, color:'#9ca3af', minWidth:72}}>Mã HV</span>
+                      <span style={{fontSize:13, fontWeight:700, color:'#4f7fff'}}>{liveStudent.studentCode || '—'}</span>
+                    </div>
                     <div style={{display:'flex', gap:10, alignItems:'center'}}>
                       <span style={{fontSize:13, color:'#9ca3af', minWidth:72}}>Họ tên</span>
                       <span style={{fontSize:14, fontWeight:700, color:'#1f2937'}}>{liveStudent.name}</span>

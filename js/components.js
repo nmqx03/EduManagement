@@ -129,25 +129,27 @@ function CopyIcon({ state }) {
 // ─────────────────────────────────────────────────────────────────
 
 // ─── PASSCODE GATE — Modal xác nhận passcode trước khi xóa ───
-function PasscodeGate({ title, message, onConfirm, onCancel, userUid }) {
+function PasscodeGate({ title, message, onConfirm, onCancel, userUid, passcodeUnlocked, setPasscodeUnlocked }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
   const [checking, setChecking] = useState(false);
-
   const [noPasscode, setNoPasscode] = useState(false);
 
   const handleConfirm = async () => {
+    // Đã unlock session → không cần nhập passcode, xác nhận thẳng
+    if (passcodeUnlocked) { onConfirm(); return; }
+
     setChecking(true);
     const profile = userUid ? await loadProfileFromDB(userUid) : loadProfile();
     const passcode = profile.passcode || "";
     setChecking(false);
 
     if (!passcode) {
-      // Chưa đặt passcode → KHÔNG cho phép xóa
       setNoPasscode(true);
       return;
     }
     if (input === passcode) {
+      if (setPasscodeUnlocked) setPasscodeUnlocked(true);
       onConfirm();
     } else {
       setError(true);
@@ -169,6 +171,12 @@ function PasscodeGate({ title, message, onConfirm, onCancel, userUid }) {
               <div style={{fontSize:13, color:'#6b7280', lineHeight:1.6}}>
                 Bạn cần đặt passcode trong trang <b>Hồ Sơ</b> trước khi có thể xóa dữ liệu.
               </div>
+            </div>
+          ) : passcodeUnlocked ? (
+            // Đã unlock → chỉ hiện xác nhận, không cần nhập passcode
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:32, marginBottom:8}}>⚠️</div>
+              <div style={{fontSize:14, color:'#374151'}}>{message}</div>
             </div>
           ) : (
             <>

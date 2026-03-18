@@ -1,9 +1,9 @@
 // ATTENDANCE PAGE
 // ─────────────────────────────────────────────────────────────────
 
-function AttendancePage({ classes, setClasses }) {
+function AttendancePage({ classes, setClasses, navigate, hashParts, user, passcodeUnlocked, setPasscodeUnlocked }) {
   // Navigation State
-  const [step, setStep] = useState(0); // 0: Class, 1: Year, 2: Month, 3: SessionList, 4: SessionDetail
+  const [step, setStep] = useState(0);
   const [selClassId, setSelClassId] = useState(null);
   const [selYear, setSelYear] = useState(null);
   const [selMonth, setSelMonth] = useState(null);
@@ -11,8 +11,25 @@ function AttendancePage({ classes, setClasses }) {
 
   // Modal States
   const [showAddSession, setShowAddSession] = useState(false);
-  const [editingSessionId, setEditingSessionId] = useState(null); // If set, we are editing
+  const [editingSessionId, setEditingSessionId] = useState(null);
   const [newSessionDate, setNewSessionDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // PasscodeGate for edit/delete session
+  const [passcodeGate, setPasscodeGate] = useState(null);
+
+  // Dropdown menu cho buổi học
+  const [sessionMenuId, setSessionMenuId] = useState(null);
+  const sessionMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!sessionMenuId) return;
+    const handler = (e) => {
+      if (sessionMenuRef.current && sessionMenuRef.current.contains(e.target)) return;
+      setSessionMenuId(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [sessionMenuId]);
   
   // Helpers
   const activeClass = useMemo(() => classes.find(c => c.id === selClassId), [classes, selClassId]);
@@ -58,6 +75,31 @@ function AttendancePage({ classes, setClasses }) {
     setEditingSessionId(session.id);
     setNewSessionDate(session.date);
     setShowAddSession(true);
+  };
+
+  // Sửa buổi — yêu cầu passcode
+  const openEditSessionGated = (session) => {
+    setPasscodeGate({
+      title: "Sửa buổi học",
+      message: `Xác nhận sửa buổi ngày ${fmtDate(session.date)}?`,
+      onConfirm: () => { setPasscodeGate(null); openEditSession(session); }
+    });
+  };
+
+  // Xóa buổi — yêu cầu passcode
+  const deleteSession = (session) => {
+    setPasscodeGate({
+      title: "Xóa buổi học",
+      message: `Xóa buổi ngày ${fmtDate(session.date)}? Toàn bộ dữ liệu điểm danh của buổi này sẽ bị xóa vĩnh viễn.`,
+      onConfirm: () => {
+        const updated = classes.map(c => {
+          if (c.id !== selClassId) return c;
+          return { ...c, sessions: c.sessions.filter(s => s.id !== session.id) };
+        });
+        setClasses(updated);
+        setPasscodeGate(null);
+      }
+    });
   };
 
   const saveSession = () => {
@@ -223,18 +265,57 @@ function AttendancePage({ classes, setClasses }) {
           {filteredSessions.map((ses, idx) => {
              const presentCount = (ses.attendance?.length || 0) + (ses.attendanceKem?.length || 0);
              return (
-              <NavCard 
-                key={ses.id} 
-                label={fmtDate(ses.date)} 
-                sub={`${presentCount}/${(activeClass.students || []).length} có mặt`}
-                icon={<Icon name="att" />} 
-                onClick={() => { setSelSessionId(ses.id); setStep(4); }}
-                onEdit={() => openEditSession(ses)}
-              />
+              <div key={ses.id} style={{position:'relative'}}>
+                <NavCard
+                  label={fmtDate(ses.date)}
+                  sub={`${presentCount}/${(activeClass.students || []).filter(s=>!s.inactive).length} có mặt`}
+                  icon={<Icon name="att" />}
+                  onClick={() => { setSelSessionId(ses.id); setStep(4); }}
+                  onEdit={() => setSessionMenuId(sessionMenuId === ses.id ? null : ses.id)}
+                />
+                {sessionMenuId === ses.id && (
+                  <div ref={sessionMenuRef} style={{
+                    position:'absolute', top:'100%', right:8, zIndex:50, marginTop:4,
+                    background:'#fff', borderRadius:10, border:'1px solid #eff6ff',
+                    boxShadow:'0 8px 24px rgba(79,127,255,0.18)', overflow:'hidden', minWidth:160
+                  }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => { setSessionMenuId(null); openEditSessionGated(ses); }} style={{
+                      width:'100%', padding:'10px 16px', border:'none', background:'transparent',
+                      display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                      fontSize:13, fontWeight:600, color:'#374151', textAlign:'left'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background='#eff6ff'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <Icon name="edit" size={15}/> Sửa ngày buổi học
+                    </button>
+                    <div style={{height:1, background:'#eff6ff'}}/>
+                    <button onClick={() => { setSessionMenuId(null); deleteSession(ses); }} style={{
+                      width:'100%', padding:'10px 16px', border:'none', background:'transparent',
+                      display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                      fontSize:13, fontWeight:600, color:'#ef4444', textAlign:'left'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background='#fef2f2'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <Icon name="trash" size={15}/> Xóa buổi học
+                    </button>
+                  </div>
+                )}
+              </div>
              );
           })}
         </div>
         {sessionModal}
+        {passcodeGate && (
+          <PasscodeGate
+            title={passcodeGate.title}
+            message={passcodeGate.message}
+            onConfirm={passcodeGate.onConfirm}
+            onCancel={() => setPasscodeGate(null)}
+            userUid={user && user.uid}
+            passcodeUnlocked={passcodeUnlocked}
+            setPasscodeUnlocked={setPasscodeUnlocked}
+          />
+        )}
       </div>
     );
   }
@@ -243,7 +324,8 @@ function AttendancePage({ classes, setClasses }) {
   if (step === 4) {
     if (!activeSession) return <div className="page-content"><div className="empty-state">Không tìm thấy buổi học</div><button className="btn-back" onClick={() => setStep(3)}>Quay lại</button></div>;
     
-    const totalStudents = (activeClass.students || []).length;
+    const activeStudents = (activeClass.students || []).filter(s => !s.inactive);
+    const totalStudents = activeStudents.length;
     const presentMain = activeSession.attendance?.length || 0;
     const presentKem = activeSession.attendanceKem?.length || 0;
     const totalPresent = presentMain + presentKem;
@@ -281,7 +363,7 @@ function AttendancePage({ classes, setClasses }) {
                 </tr>
               </thead>
               <tbody>
-                {activeClass.students.map((s, i) => {
+                {activeStudents.map((s, i) => {
                   const isMain = (activeSession.attendance || []).includes(s.id);
                   const isKem = (activeSession.attendanceKem || []).includes(s.id);
                   const stats = getMonthlyStats(s.id);

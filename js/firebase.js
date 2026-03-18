@@ -69,10 +69,8 @@ async function loadProfileFromDB(uid) {
 }
 
 async function saveProfileToDB(uid, profile) {
-  try {
-    await userCol(uid, "settings").doc("profile").set(profile);
-    saveProfile(profile);
-  } catch(e) { saveProfile(profile); }
+  await userCol(uid, "settings").doc("profile").set(profile);
+  saveProfile(profile);
 }
 
 function loadClasses() {

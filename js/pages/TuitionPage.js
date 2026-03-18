@@ -77,7 +77,7 @@ function TuitionPage({ classes, user }) {
       return y === selYear && parseInt(m) === selMonth;
     });
 
-    return (activeClass.students || []).map((s, idx) => {
+    return (activeClass.students || []).filter(s => !s.inactive).map((s, idx) => {
       const sessions = validSessions.filter(ses => (ses.attendance || []).includes(s.id)).length;
       const kemSessions = s.hasKem ? validSessions.filter(ses => (ses.attendanceKem || []).includes(s.id)).length : 0;
       const baseFee = sessions * (s.pricePerSession || 0);

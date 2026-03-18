@@ -8,6 +8,7 @@ function App() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
+  const [passcodeUnlocked, setPasscodeUnlocked] = useState(false);
   const { hash, navigate } = useHashRouter();
   const { parts } = parseHash(hash);
 
@@ -70,6 +71,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.clear();
+    setPasscodeUnlocked(false);
     window.auth.signOut();
     navigate("#/");
   };
@@ -148,12 +150,12 @@ function App() {
         </div>
 
         {page === "home"       && <HomePage onNavigate={p => navigate(`#/${p}`)} />}
-        {page === "attendance" && <AttendancePage classes={classes} setClasses={setClassesAndSave} navigate={navigate} hashParts={parts} />}
+        {page === "attendance" && <AttendancePage classes={classes} setClasses={setClassesAndSave} navigate={navigate} hashParts={parts} user={user} passcodeUnlocked={passcodeUnlocked} setPasscodeUnlocked={setPasscodeUnlocked} />}
         {page === "tuition"    && <TuitionPage classes={classes} user={user} navigate={navigate} hashParts={parts} />}
-        {page === "students"   && <StudentPage classes={classes} setClasses={setClassesAndSave} user={user} />}
+        {page === "students"   && <StudentPage classes={classes} setClasses={setClassesAndSave} user={user} passcodeUnlocked={passcodeUnlocked} setPasscodeUnlocked={setPasscodeUnlocked} />}
         {page === "data"       && <DataPage classes={classes} setClasses={setClassesAndSave} />}
         {page === "timetable"  && <TimetablePage classes={classes} user={user} />}
-        {page === "profile"    && <ProfilePage user={user} />}
+        {page === "profile"    && <ProfilePage user={user} passcodeUnlocked={passcodeUnlocked} setPasscodeUnlocked={setPasscodeUnlocked} />}
       </main>
     </div>
   );

@@ -1,42 +1,113 @@
-// PROFILE PAGE
-// ─────────────────────────────────────────────────────────────────
+// ─── VERIFY PASSWORD MODAL — Tái sử dụng cho nhiều tình huống ───
+function VerifyPwdModal({ email, title, description, headerColor, btnColor, onVerified, onCancel }) {
+  const [pwd, setPwd] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const handle = async () => {
+    if (!pwd) { setErr("Vui lòng nhập mật khẩu"); return; }
+    setLoading(true); setErr("");
+    try {
+      const credential = firebase.auth.EmailAuthProvider.credential(email, pwd);
+      await window.auth.currentUser.reauthenticateWithCredential(credential);
+      onVerified();
+    } catch {
+      setErr("Mật khẩu không đúng");
+    }
+    setLoading(false);
+  };
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+        <div className="modal-dialog-header" style={{background: headerColor || 'linear-gradient(135deg,#4f7fff,#2563eb)'}}>
+          {title || "🔑 Xác minh danh tính"}
+        </div>
+        <div className="modal-dialog-body">
+          <div style={{textAlign:'center', marginBottom:16}}>
+            <div style={{fontSize:32, marginBottom:8}}>🔐</div>
+            <div style={{fontSize:14, color:'#374151'}}>{description || "Nhập mật khẩu tài khoản để tiếp tục"}</div>
+            <div style={{fontSize:13, color:'#9ca3af', marginTop:4}}>{email}</div>
+          </div>
+          <label className="form-label">Mật khẩu</label>
+          <input className="form-input" type="password" autoFocus
+            placeholder="Nhập mật khẩu đăng nhập"
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setErr(""); }}
+            onKeyDown={e => e.key === 'Enter' && handle()}
+            style={{borderColor: err ? '#ef4444' : undefined}} />
+          {err && <div style={{color:'#ef4444', fontSize:13, marginTop:6, fontWeight:600}}>❌ {err}</div>}
+        </div>
+        <div className="modal-dialog-footer">
+          <button className="btn-cancel" onClick={onCancel}>Huỷ</button>
+          <button className="btn-save" style={btnColor ? {background: btnColor} : {}} onClick={handle} disabled={loading}>
+            {loading ? "Đang kiểm tra..." : "Xác nhận"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-function ProfilePage({ user }) {
+// ─── SAVE PASSCODE MODAL ───
+function SavePasscodeModal({ onConfirm, onCancel }) {
+  const [inp, setInp] = useState("");
+  const [err, setErr] = useState("");
+  const handleSubmit = async () => {
+    const ok = await onConfirm(inp);
+    if (!ok) { setErr("Passcode không đúng"); setInp(""); }
+  };
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+        <div className="modal-dialog-header" style={{background:'linear-gradient(135deg,#4f7fff,#2563eb)'}}>
+          🔒 Xác nhận lưu hồ sơ
+        </div>
+        <div className="modal-dialog-body">
+          <div style={{textAlign:'center', marginBottom:16}}>
+            <div style={{fontSize:32, marginBottom:8}}>💾</div>
+            <div style={{fontSize:14, color:'#374151'}}>Nhập passcode để xác nhận lưu thay đổi</div>
+          </div>
+          <label className="form-label" style={{textAlign:'center', display:'block'}}>Passcode</label>
+          <input className="form-input" type="password" inputMode="numeric" maxLength={8} autoFocus
+            placeholder="● ● ● ●"
+            value={inp}
+            style={{textAlign:'center', fontSize:22, letterSpacing:8, fontWeight:700,
+              borderColor: err ? '#ef4444' : undefined}}
+            onChange={e => { setInp(e.target.value.replace(/\D/g,'')); setErr(""); }}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+          {err && <div style={{color:'#ef4444', fontSize:13, textAlign:'center', marginTop:8, fontWeight:600}}>❌ {err}</div>}
+        </div>
+        <div className="modal-dialog-footer">
+          <button className="btn-cancel" onClick={onCancel}>Huỷ</button>
+          <button className="btn-save" onClick={handleSubmit}>Lưu hồ sơ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PROFILE PAGE
+
+function ProfilePage({ user, passcodeUnlocked, setPasscodeUnlocked }) {
   const [profile, setProfile] = useState(() => loadProfile());
   const [saved, setSaved] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [showPasscode, setShowPasscode] = useState(false);
   const [showConfirmPasscode, setShowConfirmPasscode] = useState(false);
-  const [pwdVerifyInput, setPwdVerifyInput] = useState("");
-  const [pwdVerifyError, setPwdVerifyError] = useState("");
-  const [pwdVerifying, setPwdVerifying] = useState(false);
-  const [pwdVerified, setPwdVerified] = useState(false); // đã xác minh password trong session này
+  // Passcode gate trước khi lưu — dùng global passcodeUnlocked từ App
+  const [showSavePasscodeModal, setShowSavePasscodeModal] = useState(false);
+  const [pwdVerified, setPwdVerified] = useState(false); // đã xác minh password (xem passcode) trong session
+  const [passcodeEditUnlocked, setPasscodeEditUnlocked] = useState(false); // mở khóa sửa/xóa passcode
+  const [showPasscodeEditConfirm, setShowPasscodeEditConfirm] = useState(false); // modal xác minh để sửa passcode
 
   const handleRevealPasscode = async () => {
     if (pwdVerified) {
-      // Đã xác minh rồi → toggle hiện/ẩn
       setShowPasscode(v => !v);
       return;
     }
     setShowConfirmPasscode(true);
   };
 
-  const handleVerifyPassword = async () => {
-    if (!pwdVerifyInput) { setPwdVerifyError("Vui lòng nhập mật khẩu"); return; }
-    setPwdVerifying(true); setPwdVerifyError("");
-    try {
-      // Re-authenticate bằng email + password
-      const credential = firebase.auth.EmailAuthProvider.credential(user.email, pwdVerifyInput);
-      await window.auth.currentUser.reauthenticateWithCredential(credential);
-      setPwdVerified(true);
-      setShowPasscode(true);
-      setShowConfirmPasscode(false);
-      setPwdVerifyInput("");
-    } catch(e) {
-      setPwdVerifyError("Mật khẩu không đúng");
-    }
-    setPwdVerifying(false);
-  };
   const fileRef = useRef(null);
   const logoRef = useRef(null);
 
@@ -61,12 +132,59 @@ function ProfilePage({ user }) {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
-    const savePromise = user ? saveProfileToDB(user.uid, profile) : Promise.resolve(saveProfile(profile));
-    Promise.resolve(savePromise).then(() => {
+  const handleSave = async () => {
+    // Nếu đã có passcode và chưa unlock trong session → hiện modal
+    if (profile.passcode && !passcodeUnlocked) {
+      setShowSavePasscodeModal(true);
+      return;
+    }
+    await doSave();
+  };
+
+  const handleSaveWithPasscode = async (inputVal) => {
+    if (inputVal !== profile.passcode) return false;
+    if (setPasscodeUnlocked) setPasscodeUnlocked(true);
+    setShowSavePasscodeModal(false);
+    await doSave();
+    return true;
+  };
+
+  const doSave = async () => {
+    try {
+      const compressBase64 = (dataUrl, maxW = 400, quality = 0.7) => {
+        if (!dataUrl || !dataUrl.startsWith('data:image')) return Promise.resolve(dataUrl);
+        return new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => {
+            const scale = Math.min(1, maxW / Math.max(img.width, img.height, 1));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = () => resolve(dataUrl);
+          img.src = dataUrl;
+        });
+      };
+
+      const [logoCompressed, qrCompressed] = await Promise.all([
+        compressBase64(profile.logoDataUrl, 400, 0.75),
+        compressBase64(profile.qrDataUrl, 300, 0.8),
+      ]);
+      const profileToSave = { ...profile, logoDataUrl: logoCompressed, qrDataUrl: qrCompressed };
+      setProfile(profileToSave);
+
+      if (user) {
+        await saveProfileToDB(user.uid, profileToSave);
+      } else {
+        saveProfile(profileToSave);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    });
+    } catch(e) {
+      alert('Lưu thất bại: ' + (e.message || e));
+    }
   };
 
   const field = (label, key, placeholder, type="text") => (
@@ -171,56 +289,74 @@ function ProfilePage({ user }) {
               maxLength={8}
               placeholder={profile.passcode ? "••••" : "Chưa đặt passcode"}
               value={profile.passcode || ""}
+              readOnly={!!profile.passcode && !passcodeEditUnlocked}
               onChange={e => handleChange("passcode", e.target.value.replace(/\D/g,""))}
-              style={{paddingRight:44}} />
+              onClick={() => {
+                if (profile.passcode && !passcodeEditUnlocked) {
+                  setShowPasscodeEditConfirm(true);
+                }
+              }}
+              style={{paddingRight:80, cursor: (profile.passcode && !passcodeEditUnlocked) ? 'pointer' : 'text',
+                background: (profile.passcode && !passcodeEditUnlocked) ? '#f8fafc' : '#fff'}} />
+            {/* Nút mở khóa sửa passcode */}
+            {profile.passcode && !passcodeEditUnlocked && (
+              <button type="button" onClick={() => setShowPasscodeEditConfirm(true)} style={{
+                position:'absolute', right:44, top:'50%', transform:'translateY(-50%)',
+                background:'none', border:'none', cursor:'pointer', fontSize:16, padding:0, color:'#f59e0b'
+              }} title="Xác minh để sửa passcode">🔓</button>
+            )}
             <button type="button" onClick={handleRevealPasscode} style={{
               position:'absolute', right:12, top:'50%', transform:'translateY(-50%)',
               background:'none', border:'none', cursor:'pointer', color:'#9ca3af', fontSize:18, padding:0
             }}>{showPasscode ? "🙈" : "👁️"}</button>
           </div>
-          {profile.passcode ? (
-            <div style={{marginTop:8, fontSize:12, color:'#16a34a'}}>
-              ✅ Passcode đã được đặt — bắt buộc nhập khi xóa dữ liệu
+          {profile.passcode && !passcodeEditUnlocked && (
+            <div style={{marginTop:8, fontSize:12, color:'#f59e0b'}}>
+              🔓 Nhấn vào ô passcode hoặc biểu tượng khóa để sửa — cần xác minh mật khẩu
             </div>
-          ) : (
+          )}
+          {passcodeEditUnlocked && (
+            <div style={{marginTop:8, fontSize:12, color:'#16a34a'}}>
+              ✅ Đã mở khóa — bạn có thể sửa hoặc xóa passcode
+            </div>
+          )}
+          {!profile.passcode && (
             <div style={{marginTop:8, fontSize:12, color:'#f59e0b'}}>
               ⚠️ Chưa đặt passcode — không thể xóa dữ liệu
             </div>
           )}
         </div>
 
+        {/* Modal nhập passcode để lưu hồ sơ */}
+        {showSavePasscodeModal && (
+          <SavePasscodeModal
+            onConfirm={handleSaveWithPasscode}
+            onCancel={() => setShowSavePasscodeModal(false)}
+          />
+        )}
+
+        {/* Modal xác minh mật khẩu mail để sửa/xóa passcode */}
+        {showPasscodeEditConfirm && (
+          <VerifyPwdModal
+            email={user?.email}
+            title="🔓 Xác minh để sửa Passcode"
+            headerColor="linear-gradient(135deg,#f59e0b,#d97706)"
+            btnColor="linear-gradient(135deg,#f59e0b,#d97706)"
+            description="Nhập mật khẩu tài khoản để được phép sửa hoặc xóa passcode"
+            onVerified={() => { setPasscodeEditUnlocked(true); setShowPasscodeEditConfirm(false); }}
+            onCancel={() => setShowPasscodeEditConfirm(false)}
+          />
+        )}
+
         {/* Modal xác nhận password trước khi xem passcode */}
         {showConfirmPasscode && (
-          <div className="modal-overlay" onClick={() => { setShowConfirmPasscode(false); setPwdVerifyInput(""); setPwdVerifyError(""); }}>
-            <div className="modal-dialog" onClick={e => e.stopPropagation()}>
-              <div className="modal-dialog-header" style={{background:'linear-gradient(135deg,#4f7fff,#2563eb)'}}>
-                🔑 Xác minh danh tính
-              </div>
-              <div className="modal-dialog-body">
-                <div style={{textAlign:'center', marginBottom:16}}>
-                  <div style={{fontSize:32, marginBottom:8}}>🔐</div>
-                  <div style={{fontSize:14, color:'#374151'}}>Nhập mật khẩu tài khoản để xem passcode</div>
-                  <div style={{fontSize:13, color:'#9ca3af', marginTop:4}}>{user?.email}</div>
-                </div>
-                <label className="form-label">Mật khẩu</label>
-                <input className="form-input" type="password" autoFocus
-                  placeholder="Nhập mật khẩu đăng nhập"
-                  value={pwdVerifyInput}
-                  onChange={e => { setPwdVerifyInput(e.target.value); setPwdVerifyError(""); }}
-                  onKeyDown={e => e.key === "Enter" && handleVerifyPassword()}
-                  style={{borderColor: pwdVerifyError ? '#ef4444' : undefined}} />
-                {pwdVerifyError && (
-                  <div style={{color:'#ef4444', fontSize:13, marginTop:6, fontWeight:600}}>❌ {pwdVerifyError}</div>
-                )}
-              </div>
-              <div className="modal-dialog-footer">
-                <button className="btn-cancel" onClick={() => { setShowConfirmPasscode(false); setPwdVerifyInput(""); setPwdVerifyError(""); }}>Huỷ</button>
-                <button className="btn-save" onClick={handleVerifyPassword} disabled={pwdVerifying}>
-                  {pwdVerifying ? "Đang kiểm tra..." : "Xác nhận"}
-                </button>
-              </div>
-            </div>
-          </div>
+          <VerifyPwdModal
+            email={user?.email}
+            title="🔑 Xác minh danh tính"
+            description="Nhập mật khẩu tài khoản để xem passcode"
+            onVerified={() => { setPwdVerified(true); setShowPasscode(true); setShowConfirmPasscode(false); }}
+            onCancel={() => setShowConfirmPasscode(false)}
+          />
         )}
 
         <button onClick={handleSave} style={{

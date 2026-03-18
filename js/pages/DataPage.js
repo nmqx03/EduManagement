@@ -82,8 +82,8 @@ function DataPage({ classes, setClasses }) {
         nameRange: "AM5:AM34",
         priceRange: "AO5:AO34",
         hasAttendance: false,
-        attendanceRange: "",
-        attendanceDateRow: "",
+        attendanceRange: "F5:AI34",
+        attendanceDateRow: "F4:AI4",
         attendanceYear: new Date().getFullYear().toString(),
         attendanceMonth: (new Date().getMonth() + 1).toString(),
     });
@@ -258,12 +258,8 @@ function DataPage({ classes, setClasses }) {
         reader.readAsArrayBuffer(file);
     };
 
-    // Helper to decode range string (e.g., "A1:B2") into indices
     const decodeRange = (rangeStr) => {
-        try {
-            const range = XLSX.utils.decode_range(rangeStr);
-            return range;
-        } catch { return null; }
+        try { return XLSX.utils.decode_range(rangeStr); } catch { return null; }
     };
 
     const getCellValue = (ws, r, c) => {
@@ -280,16 +276,18 @@ function DataPage({ classes, setClasses }) {
         // DD/MM/YYYY
         const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
         if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
-        // DD/MM (dùng năm/tháng fallback)
+        // DD/MM
         const dm = s.match(/^(\d{1,2})\/(\d{1,2})$/);
         if (dm) return `${fallbackYear}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
-        // Chỉ là số ngày
+        // Chỉ là số ngày (1-31)
         const dayOnly = s.match(/^(\d{1,2})$/);
         if (dayOnly) return `${fallbackYear}-${String(fallbackMonth).padStart(2,'0')}-${dayOnly[1].padStart(2,'0')}`;
-        // Excel serial date
-        if (!isNaN(Number(s))) {
+        // Excel serial date — dùng UTC để tránh lệch timezone
+        if (!isNaN(Number(s)) && Number(s) > 1000) {
             const d = new Date(Math.round((Number(s) - 25569) * 86400 * 1000));
-            if (!isNaN(d)) return d.toISOString().slice(0,10);
+            if (!isNaN(d.getTime())) {
+                return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+            }
         }
         return null;
     };
@@ -297,34 +295,51 @@ function DataPage({ classes, setClasses }) {
     const handleProcessImport = () => {
         if (!wb) return;
         const ws = wb.Sheets[sheetName];
-        if (!ws) return;
+        if (!ws) { alert("Không tìm thấy sheet: " + sheetName); return; }
 
         const rName = decodeRange(config.nameRange);
-        if (!rName) { alert("Vùng họ tên không hợp lệ"); return; }
+        if (!rName) { alert("❌ Vùng Họ Tên không hợp lệ: \"" + config.nameRange + "\""); return; }
 
         const rPrice = config.priceRange ? decodeRange(config.priceRange) : null;
+        if (config.priceRange && !rPrice) { alert("❌ Vùng Học Phí không hợp lệ: \"" + config.priceRange + "\""); return; }
 
-        // ── Đọc attendance nếu có ──
-        let rAtt = null, sessionDates = []; // sessionDates[colIdx] = "YYYY-MM-DD"
-        if (config.hasAttendance && config.attendanceRange) {
+        let rAtt = null, sessionDates = [];
+        if (config.hasAttendance) {
+            if (!config.attendanceRange) { alert("❌ Vui lòng nhập vùng điểm danh"); return; }
             rAtt = decodeRange(config.attendanceRange);
-            if (!rAtt) { alert("Vùng điểm danh không hợp lệ"); return; }
+            if (!rAtt) { alert("❌ Vùng điểm danh không hợp lệ: \"" + config.attendanceRange + "\""); return; }
 
             const fy = config.attendanceYear || new Date().getFullYear().toString();
             const fm = config.attendanceMonth || (new Date().getMonth()+1).toString();
 
+            if (!config.attendanceDateRow) { alert("❌ Vui lòng nhập hàng chứa ngày (bắt buộc)"); return; }
+
             if (config.attendanceDateRow) {
-                // Đọc ngày từ hàng header
                 const rDate = decodeRange(config.attendanceDateRow);
-                if (!rDate) { alert("Vùng ngày điểm danh không hợp lệ"); return; }
+                if (!rDate) { alert("❌ Vùng ngày không hợp lệ: \"" + config.attendanceDateRow + "\""); return; }
+
+                // Kiểm tra số cột khớp
+                const attCols = rAtt.e.c - rAtt.s.c + 1;
+                const dateCols = rDate.e.c - rDate.s.c + 1;
+                if (attCols !== dateCols) {
+                    alert(`❌ Số cột không khớp:\n• Vùng điểm danh: ${attCols} cột\n• Vùng ngày: ${dateCols} cột`);
+                    return;
+                }
+
                 for (let c = rAtt.s.c; c <= rAtt.e.c; c++) {
                     const colOffset = c - rAtt.s.c;
                     const dateC = rDate.s.c + colOffset;
                     const v = getCellValue(ws, rDate.s.r, dateC);
                     sessionDates.push(parseImportDate(v, fy, fm));
                 }
+
+                const hasAnyDate = sessionDates.some(Boolean);
+                if (!hasAnyDate) {
+                    alert("❌ Không đọc được ngày nào từ vùng \"" + config.attendanceDateRow + "\"\nChấp nhận: DD/MM/YYYY, DD/MM, số ngày, Excel date serial");
+                    return;
+                }
             } else {
-                // Không có hàng ngày → tự tạo ngày theo tháng/năm + số thứ tự cột
+                // Không có hàng ngày → tạo ngày liên tiếp theo tháng/năm
                 const totalCols = rAtt.e.c - rAtt.s.c + 1;
                 for (let i = 0; i < totalCols; i++) {
                     sessionDates.push(`${fy}-${String(fm).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`);
@@ -332,36 +347,43 @@ function DataPage({ classes, setClasses }) {
             }
         }
 
+        // Lấy tên lớp để tạo mã học viên
+        const targetCls = targetClassId === "new" ? null : classes.find(c => c.id === targetClassId);
+        const clsName = targetClassId === "new" ? (newClassName || "").trim() : (targetCls?.name || "");
+        const clsNameShort = clsName.replace(/\s+/g, '');
+        // Số học viên hiện có trong lớp (để tính STT tiếp theo)
+        const existingCount = targetCls ? (targetCls.students || []).length : 0;
+
         const newStudents = [];
-        const studentRowMap = []; // lưu row index cho từng student để map điểm danh
+        const studentRowMap = [];
 
         for (let r = rName.s.r; r <= rName.e.r; r++) {
-            const c = rName.s.c;
-            const nameVal = getCellValue(ws, r, c);
-            if (nameVal) {
-                const sid = Date.now().toString() + Math.random().toString().slice(2,5) + newStudents.length;
-                let price = 0;
-                if (rPrice && r >= rPrice.s.r && r <= rPrice.e.r) {
-                    const pVal = getCellValue(ws, r, rPrice.s.c);
-                    if (pVal) price = parseInt(String(pVal).replace(/\D/g, "")) || 0;
-                }
-                newStudents.push({ id: sid, name: String(nameVal).trim(), pricePerSession: price, hasKem: false, kemPrice: 0, days: [] });
-                studentRowMap.push(r);
+            const nameVal = getCellValue(ws, r, rName.s.c);
+            if (!nameVal || nameVal === 0 || String(nameVal).trim() === "0") continue;
+            const nameStr = String(nameVal).trim();
+            if (!nameStr || nameStr.toLowerCase().includes("tổng")) continue;
+            const sid = Date.now().toString() + Math.random().toString().slice(2,5) + newStudents.length;
+            let price = 0;
+            if (rPrice && r >= rPrice.s.r && r <= rPrice.e.r) {
+                const pVal = getCellValue(ws, r, rPrice.s.c);
+                if (pVal) price = parseInt(String(pVal).replace(/\D/g, "")) || 0;
             }
+            // Mã học viên: STT 2 chữ số + tên lớp, VD: 01E2019
+            const stt = existingCount + newStudents.length + 1;
+            const studentCode = String(stt).padStart(2, '0') + clsNameShort;
+            newStudents.push({ id: sid, studentCode, name: nameStr, pricePerSession: price, hasKem: false, kemPrice: 0, days: [] });
+            studentRowMap.push(r);
         }
 
         if (newStudents.length === 0) { alert("Không tìm thấy học sinh nào trong vùng đã chọn."); return; }
 
-        // ── Tạo sessions từ attendance ──
         let importedSessions = [];
         if (rAtt && sessionDates.length > 0) {
-            const sessionMap = {}; // date -> { id, date, attendance:[], attendanceKem:[] }
+            const sessionMap = {};
             for (let ci = 0; ci < sessionDates.length; ci++) {
                 const date = sessionDates[ci];
                 if (!date) continue;
                 const colIdx = rAtt.s.c + ci;
-
-                // Tìm các học sinh có mặt ở buổi này
                 for (let si = 0; si < newStudents.length; si++) {
                     const rowIdx = studentRowMap[si];
                     if (rowIdx < rAtt.s.r || rowIdx > rAtt.e.r) continue;
@@ -379,9 +401,7 @@ function DataPage({ classes, setClasses }) {
             importedSessions = Object.values(sessionMap).sort((a,b) => a.date.localeCompare(b.date));
         }
 
-        let updatedClasses;
-        let finalClassName = "";
-        let sessionCount = importedSessions.length;
+        let updatedClasses, finalClassName = "", sessionCount = importedSessions.length, mergeSkipped = 0;
 
         if (targetClassId === "new") {
             if (!newClassName.trim()) { alert("Vui lòng nhập tên lớp mới"); return; }
@@ -392,16 +412,49 @@ function DataPage({ classes, setClasses }) {
             updatedClasses = classes.map(cls => {
                 if (cls.id !== targetClassId) return cls;
                 finalClassName = cls.name;
-                // Merge students (append)
-                const mergedStudents = [...(cls.students || []), ...newStudents];
-                // Merge sessions: nếu ngày đã có → gộp danh sách điểm danh; nếu chưa → thêm mới
-                const existingSessions = [...(cls.sessions || [])];
-                for (const ns of importedSessions) {
-                    const exist = existingSessions.find(s => s.date === ns.date);
-                    if (exist) {
-                        exist.attendance = [...new Set([...exist.attendance, ...ns.attendance])];
+                const clsShort = cls.name.replace(/\s+/g, '');
+
+                // Bỏ học sinh trùng tên
+                const existingNames = new Set((cls.students || []).map(s => s.name.trim().toLowerCase()));
+                const toAdd = [];
+                const idRemap = {};
+
+                newStudents.forEach(ns => {
+                    if (existingNames.has(ns.name.trim().toLowerCase())) {
+                        // Trùng → remap id sang học sinh cũ
+                        const existing = (cls.students || []).find(s => s.name.trim().toLowerCase() === ns.name.trim().toLowerCase());
+                        if (existing) idRemap[ns.id] = existing.id;
+                        mergeSkipped++;
                     } else {
-                        existingSessions.push(ns);
+                        // Mới → cấp mã tự động
+                        const stt = (cls.students || []).length + toAdd.length + 1;
+                        const studentCode = String(stt).padStart(2, '0') + clsShort;
+                        toAdd.push({ ...ns, studentCode });
+                        idRemap[ns.id] = ns.id;
+                    }
+                });
+
+                const mergedStudents = [...(cls.students || []), ...toAdd];
+                const existingDates = new Set((cls.sessions || []).map(s => s.date));
+                const existingSessions = [...(cls.sessions || [])];
+
+                for (const ns of importedSessions) {
+                    const remapId = (aid) => {
+                        const newStu = newStudents.find(s => s.id === aid);
+                        return newStu ? (idRemap[newStu.id] || aid) : aid;
+                    };
+                    const remappedAtt = ns.attendance.map(remapId);
+                    const remappedKem = (ns.attendanceKem || []).map(remapId);
+
+                    if (existingDates.has(ns.date)) {
+                        const exist = existingSessions.find(s => s.date === ns.date);
+                        if (exist) {
+                            const newIds = new Set(toAdd.map(s => s.id));
+                            exist.attendance = [...new Set([...exist.attendance, ...remappedAtt.filter(id => newIds.has(id))])];
+                            exist.attendanceKem = [...new Set([...(exist.attendanceKem || []), ...remappedKem.filter(id => newIds.has(id))])];
+                        }
+                    } else {
+                        existingSessions.push({ ...ns, attendance: remappedAtt, attendanceKem: remappedKem });
                     }
                 }
                 existingSessions.sort((a,b) => a.date.localeCompare(b.date));
@@ -411,12 +464,13 @@ function DataPage({ classes, setClasses }) {
 
         setClasses(updatedClasses);
         const sessMsg = sessionCount > 0 ? `, ${sessionCount} buổi điểm danh` : "";
-        alert(`Đã nhập thành công ${newStudents.length} học sinh${sessMsg} vào lớp "${finalClassName}"!`);
+        const skipMsg = mergeSkipped > 0 ? `\n(Bỏ qua ${mergeSkipped} học sinh trùng tên)` : "";
+        alert(`✅ Đã nhập thành công ${newStudents.length - mergeSkipped} học sinh${sessMsg} vào lớp "${finalClassName}"!${skipMsg}`);
         setImportStep(0);
         setWb(null);
     };
 
-    const handleExportPDF = () => {
+        const handleExportPDF = () => {
         if (!exportClassId) { alert("Vui lòng chọn lớp!"); return; }
         if (!window.jspdf) { alert("Thư viện jsPDF chưa tải xong!"); return; }
         if (!window.html2canvas) { alert("Thư viện html2canvas chưa tải xong!"); return; }
@@ -663,11 +717,13 @@ function DataPage({ classes, setClasses }) {
                              <div className="form-grid-2">
                                 <div>
                                     <label className="form-label">Vùng Họ Tên <span style={{color:'#ef4444'}}>*</span></label>
-                                    <input className="form-input" value={config.nameRange} onChange={e => setConfig({...config, nameRange: e.target.value})} placeholder="VD: B5:B30" />
+                                    <input className="form-input" value={config.nameRange} onChange={e => setConfig({...config, nameRange: e.target.value})} placeholder="VD: AM5:AM34" />
                                 </div>
+                             </div>
+                             <div className="form-grid-2" style={{marginTop:12}}>
                                 <div>
                                     <label className="form-label">Vùng Học Phí (Tuỳ chọn)</label>
-                                    <input className="form-input" value={config.priceRange} onChange={e => setConfig({...config, priceRange: e.target.value})} placeholder="VD: C5:C30" />
+                                    <input className="form-input" value={config.priceRange} onChange={e => setConfig({...config, priceRange: e.target.value})} placeholder="VD: AO5:AO34" />
                                 </div>
                              </div>
 
@@ -690,41 +746,32 @@ function DataPage({ classes, setClasses }) {
                                          <label className="form-label">Vùng điểm danh <span style={{color:'#ef4444'}}>*</span></label>
                                          <input className="form-input" value={config.attendanceRange}
                                              onChange={e => setConfig({...config, attendanceRange: e.target.value})}
-                                             placeholder="VD: C5:Z34 (cột = buổi, hàng = học sinh)" />
+                                             placeholder="VD: F4:AI34" />
                                          <div style={{fontSize:12, color:"#9ca3af", marginTop:4}}>Số hàng phải khớp với vùng Họ Tên</div>
                                      </div>
                                      <div>
-                                         <label className="form-label">Hàng chứa ngày (Tuỳ chọn)</label>
+                                         <label className="form-label">Hàng chứa ngày <span style={{color:'#ef4444'}}>*</span></label>
                                          <input className="form-input" value={config.attendanceDateRow}
                                              onChange={e => setConfig({...config, attendanceDateRow: e.target.value})}
-                                             placeholder="VD: C2:Z2 — để trống nếu không có" />
-                                         <div style={{fontSize:12, color:"#9ca3af", marginTop:4}}>Chấp nhận: DD/MM/YYYY, DD/MM, ngày số, Excel date</div>
+                                             placeholder="VD: F4:AI4"
+                                             style={{borderColor: config.hasAttendance && !config.attendanceDateRow ? '#ef4444' : undefined}} />
+                                         <div style={{fontSize:12, color:"#9ca3af", marginTop:4}}>Chấp nhận: DD/MM/YYYY, DD/MM, số ngày, Excel date</div>
+                                         {config.hasAttendance && !config.attendanceDateRow && (
+                                             <div style={{fontSize:12, color:'#ef4444', marginTop:4, fontWeight:600}}>⚠️ Bắt buộc phải nhập hàng chứa ngày</div>
+                                         )}
                                      </div>
-                                     {!config.attendanceDateRow && (
-                                         <div className="form-grid-2">
-                                             <div>
-                                                 <label className="form-label">Năm</label>
-                                                 <input className="form-input" type="number" min="2020" max="2099"
-                                                     value={config.attendanceYear}
-                                                     onChange={e => setConfig({...config, attendanceYear: e.target.value})} />
-                                             </div>
-                                             <div>
-                                                 <label className="form-label">Tháng</label>
-                                                 <select className="form-input" value={config.attendanceMonth}
-                                                     onChange={e => setConfig({...config, attendanceMonth: e.target.value})}>
-                                                     {Array.from({length:12}, (_,i) => i+1).map(m => (
-                                                         <option key={m} value={m}>Tháng {m}</option>
-                                                     ))}
-                                                 </select>
-                                             </div>
-                                         </div>
-                                     )}
                                  </div>
                              )}
 
                              <div style={{display:'flex', gap:10, marginTop:20}}>
                                 <button className="btn-back" onClick={() => { setWb(null); setImportStep(1); }}>Chọn file khác</button>
-                                <button className="btn-save" style={{flex:1}} onClick={handleProcessImport}>Xử lý & Nhập</button>
+                                <button className="btn-save" style={{flex:1,
+                                    opacity: (config.hasAttendance && (!config.attendanceRange || !config.attendanceDateRow)) ? 0.5 : 1,
+                                    cursor: (config.hasAttendance && (!config.attendanceRange || !config.attendanceDateRow)) ? 'not-allowed' : 'pointer'
+                                }} onClick={handleProcessImport}
+                                    disabled={config.hasAttendance && (!config.attendanceRange || !config.attendanceDateRow)}>
+                                    Xử lý &amp; Nhập
+                                </button>
                              </div>
                          </div>
                      )}
