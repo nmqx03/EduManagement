@@ -238,21 +238,20 @@ body {
 .receipt-preview-container {
     background: #f5f9ff;
     flex: 1;
-    overflow-y: auto; /* Changed from hidden to auto */
+    overflow-y: auto;
     overflow-x: hidden;
     position: relative;
-    padding-top: 20px;
-    display: flex; 
+    padding: 16px;
+    display: flex;
     justify-content: center;
 }
-/* Scale the 1080px receipt down to fit */
+/* Scale động qua JS — transform-origin top left để không bị lệch */
 .receipt-scale-wrapper {
-    transform: scale(0.45); 
-    transform-origin: top center;
+    transform: scale(0.45);
+    transform-origin: top left;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    /* Wrapper needs height equal to scaled height to scroll properly */
-    height: 900px; /* Approx 2000 * 0.45 */
-    margin-bottom: 20px;
+    height: 900px;
+    flex-shrink: 0;
 }
 
 /* ─── RECEIPT PRINT CSS ─── */
@@ -531,12 +530,6 @@ body {
   /* ─── Bottom safe area for page content ─── */
   .page-content {
     padding-bottom: max(40px, env(safe-area-inset-bottom, 20px));
-  }
-
-  /* ─── Receipt scale nhỏ hơn trên mobile ─── */
-  .receipt-scale-wrapper {
-    transform: scale(0.28);
-    height: 560px;
   }
 }
 

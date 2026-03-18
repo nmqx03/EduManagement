@@ -387,8 +387,17 @@ function TuitionPage({ classes, user }) {
                     <h3>Phiếu – {selected.name}</h3>
                     <button className="modal-close" onClick={() => setPreview(false)}>×</button>
                 </div>
-                {/* Scaled Preview Section */}
-                <div className="receipt-preview-container">
+                {/* Scaled Preview Section — scale động theo width container */}
+                <div className="receipt-preview-container" ref={el => {
+                  if (!el) return;
+                  const containerW = el.clientWidth - 32; // trừ padding
+                  const scale = Math.min(containerW / 1080, 0.5);
+                  const wrapper = el.querySelector('.receipt-scale-wrapper');
+                  if (wrapper) {
+                    wrapper.style.transform = `scale(${scale})`;
+                    wrapper.style.height = Math.round(1920 * scale) + 'px';
+                  }
+                }}>
                     <div className="receipt-scale-wrapper">
                         <ReceiptMarkup 
                             student={selected} bankInfo={bankInfo} qrCodeUrl={qrCodeUrl} profile={profile}
