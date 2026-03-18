@@ -123,8 +123,9 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, context, profile: pro
 function renderReceiptToCanvas(student, bankInfo, qrCodeUrl, context, profile) {
   return new Promise((resolve, reject) => {
     const wrap = document.createElement("div");
-    // Dùng position:absolute thay fixed để tránh html2canvas tính sai offset khi trang đang scroll
-    wrap.style.cssText = "position:absolute;left:-9999px;top:0;width:1080px;pointer-events:none;z-index:-1;visibility:hidden;";
+    // opacity:0 thay visibility:hidden — html2canvas render được, nhưng người dùng không thấy
+    // top:-9999px thay left:-9999px để tránh bị clip bởi overflow:hidden của các container
+    wrap.style.cssText = "position:fixed;left:0;top:-9999px;width:1080px;pointer-events:none;z-index:-1;opacity:0;";
     document.body.appendChild(wrap);
     
     const tmpRoot = ReactDOM.createRoot(wrap);
